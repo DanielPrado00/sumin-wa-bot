@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: sumin-wa-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: WA_VERIFY_TOKEN
+        value: sumin_webhook_2026
+      - key: WA_ACCESS_TOKEN
+        sync: false
+      - key: WA_PHONE_NUMBER_ID
+        value: "1090319730822008"
+      - key: WA_OFICINA_SPS
+        sync: false
+      - key: WA_CONFIRMACION_GROUP
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
