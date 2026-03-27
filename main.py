@@ -459,3 +459,21 @@ td{{padding:8px 10px;border-bottom:1px solid #0a2040}}
 @app.get("/health")
 async def health():
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
+
+@app.get("/privacy")
+async def privacy():
+        return Response(content="""<!DOCTYPE html>
+        <html><head><meta charset='utf-8'><title>Politica de Privacidad - SUMIN</title>
+        <style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#333;line-height:1.6}h1{color:#1a1a2e}</style>
+        </head><body>
+        <h1>Politica de Privacidad - SUMIN Bot</h1>
+        <p><strong>Suministros Internacionales HN (SUMIN)</strong> - Ultima actualizacion: Marzo 2026</p>
+        <h2>Informacion que recopilamos</h2>
+        <p>Cuando interactua con nuestro asistente de WhatsApp, recopilamos el contenido de sus mensajes y numero de telefono unicamente para atender su solicitud comercial.</p>
+        <h2>Uso de la informacion</h2>
+        <p>La informacion se usa exclusivamente para responder consultas, procesar comprobantes de pago y coordinar pedidos. No compartimos su informacion con terceros ajenos a SUMIN.</p>
+        <h2>Seguridad</h2>
+        <p>Usamos servicios con cifrado en transito (Render, Meta WhatsApp Business API) para proteger su informacion.</p>
+        <h2>Contacto y eliminacion de datos</h2>
+        <p>Para consultas o solicitar eliminacion de datos: <a href="mailto:danielprado@suminhn.com">danielprado@suminhn.com</a></p>
+        </body></html>""", media_type="text/html")
