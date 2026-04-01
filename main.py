@@ -1,4 +1,4 @@
-    "Sumin Oficina SPS", "Arnold Sumin",    "Sumin Oficina SPS", "Arnold Sumin",
+"""
 SUMIN WhatsApp Business API Bot
 Multi-agent system: SalesAgent, VisionAgent, PaymentAgent, FulfillmentAgent
 """
