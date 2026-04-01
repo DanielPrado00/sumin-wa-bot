@@ -1,8 +1,7 @@
-"""
-SUMIN WhatsApp Business API Bot
+""" SUMIN WhatsApp Business API Bot
 Multi-agent system: SalesAgent, VisionAgent, PaymentAgent, FulfillmentAgent
 """
-import os, json, re, httpx, base64
+import os, json, re, httpx, base64, time
 from datetime import datetime
 from fastapi import FastAPI, Request, Response, BackgroundTasks
 from fastapi.responses import PlainTextResponse
@@ -10,28 +9,38 @@ import anthropic
 
 app = FastAPI()
 
-# ─── CONFIG ───────────────────────────────────────────────────────────────────
-VERIFY_TOKEN      = os.environ["WA_VERIFY_TOKEN"]       # string que tú defines
-WA_TOKEN          = os.environ["WA_ACCESS_TOKEN"]        # token permanente
-PHONE_NUMBER_ID   = os.environ["WA_PHONE_NUMBER_ID"]     # 1090319730822008
+# ─── CONFIG ──────────────────────────────────────────────────────────────────
+VERIFY_TOKEN     = os.environ["WA_VERIFY_TOKEN"]
+WA_TOKEN         = os.environ["WA_ACCESS_TOKEN"]
+PHONE_NUMBER_ID  = os.environ["WA_PHONE_NUMBER_ID"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
-STATE_FILE        = "orders_state.json"
-LOG_FILE          = "bot_log.json"
+STATE_FILE = "orders_state.json"
+LOG_FILE   = "bot_log.json"
 
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 SKIP_NUMBERS = {
-    "Sumin Oficina SPS", "Arnold Sumin",
-    "Confirmación de transferencias Sumin", "Servicio Al Cliente Boxful"
+    "Sumin Oficina SPS",
+    "Arnold Sumin",
+    "Confirmación de transferencias Sumin",
+    "Servicio Al Cliente Boxful"
 }
 
-# ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
-SUMIN_SYSTEM = """Eres Daniel Prado, agente de ventas de Suministros Internacionales HN (SUMIN).
-Respondes en español, tono profesional pero amigable. NO uses "Estimado/a" para abrir.
+# ─── SYSTEM PROMPT ───────────────────────────────────────────────────────────
+SUMIN_SYSTEM = """Eres un agente de ventas de Suministros Internacionales HN (SUMIN).
+Respondes en español, con un tono natural y conversacional — como una persona real, NO como un robot.
+
+ESTILO DE RESPUESTA:
+- Sé directo y breve. No uses listas largas ni estructuras formales innecesarias.
+- NO uses "Estimado/a" ni saludos muy formales.
+- USA POCOS EMOJIS: solo en ubicaciones y horarios (máximo 2). En respuestas sobre precios, productos o cotizaciones, ninguno o máximo 1. No pongas emojis en cada oración.
+- No uses negritas excesivas ni bullets para todo.
+- Cuando el cliente ya dio suficiente información, no sigas haciendo más preguntas innecesarias.
+- Si no tienes el precio, sé honesto: "No tengo ese precio aquí ahora mismo, pero puede llamarnos o pasar por tienda y le confirmamos."
 
 UBICACIONES:
-📍 San Pedro Sula: 1ra calle, entre 1ra y 2da avenida, Barrio Guamilito | https://maps.app.goo.gl/fRpNHwpqSPxHjYzP9
-📍 Tegucigalpa (Comayagüela): 6a Av. entre 8a y 9a Calle, local #47 | https://maps.app.goo.gl/TegusLink
+📍 San Pedro Sula: 1ra calle, entre 1ra y 2da avenida, Edificio Metrocentro, Local #3 | https://maps.app.goo.gl/KUH7HU2idddQXCSPA
+📍 Tegucigalpa (Comayagüela): 8 calle, entre 3ra y 4ta avenida, frente a cafetería Macao, a la par del nuevo estacionamiento del Hospital Policlínica | https://maps.app.goo.gl/2iNJW6wMDtKn68cg8
 
 HORARIO: Lunes a Viernes 8am-5pm, Sábados 8am-12pm
 
@@ -42,16 +51,22 @@ ENVÍOS:
 - Flete Tarifa B (otros destinos): L174 base + L1.96/lb adicional
 - Islas: cotizar directo con naviera
 
+PRODUCTOS — INFORMACIÓN IMPORTANTE:
+- Electrodo 6011: disponible SOLO en 3/32", 1/8" y 5/32". NO tenemos 1/16" ni 3/16" ni otros diámetros.
+- Caretas de soldadura: vendemos careta con respirador electrónico para humos de soldadura. NO vendemos caretas de protección mecánica ni química.
+- Para consumibles MIG: pedir foto del producto actual para identificar la referencia correcta.
+- Si el cliente pregunta por algo que no vendemos, díselo directamente.
+
 REGLAS CLAVE:
-- Si el cliente pregunta por cotización, pedí: producto, cantidad, unidad, destino de envío
-- Si mandó imagen de producto, identificá qué es y respondé con disponibilidad/precio
+- Si el cliente pregunta por cotización, pedí: producto, cantidad, unidad, destino de envío. Luego, si tienes el precio dalo directo en el chat. Si no lo tienes, dí "no tengo ese precio aquí ahora, puede llamarnos o pasar por tienda".
+- NO prometas enviar una cotización formal si no la puedes enviar.
+- Si mandó imagen de producto, identificá qué es y respondé con disponibilidad/precio.
 - Si mandó comprobante de pago, respondé: "Con gusto [nombre]! Recibimos su comprobante, ya lo procesamos ✅"
-- Código W.A. de Zoho (formato: letras+números como "abc123"): NO es comprobante, ignorar
-- NUNCA inventes precios que no conocés, decí "le consulto y le confirmo"
-- Para consumibles MIG: solicitar foto del producto actual para identificar referencia correcta
+- Código Zoho (formato letras+números como "abc123"): NO es comprobante, ignorar.
+- NUNCA inventes precios que no conocés.
 """
 
-# ─── HELPERS ──────────────────────────────────────────────────────────────────
+# ─── HELPERS ─────────────────────────────────────────────────────────────────
 def load_state():
     try:
         with open(STATE_FILE) as f:
@@ -77,7 +92,7 @@ def log_action(agent: str, action: str, detail: str):
             "action": action,
             "detail": detail[:200]
         })
-        logs = logs[-200:]  # keep last 200 entries
+        logs = logs[-200:]
         with open(LOG_FILE, "w") as f:
             json.dump(logs, f, indent=2, ensure_ascii=False)
     except:
@@ -103,12 +118,10 @@ def wa_forward_image(media_id: str, to: str):
 def wa_download_image(media_id: str) -> bytes:
     """Download image bytes from WhatsApp media."""
     headers = {"Authorization": f"Bearer {WA_TOKEN}"}
-    # Get media URL
     r = httpx.get(f"https://graph.facebook.com/v22.0/{media_id}", headers=headers, timeout=15)
     media_url = r.json().get("url", "")
     if not media_url:
         return b""
-    # Download image
     r2 = httpx.get(media_url, headers=headers, timeout=30)
     return r2.content
 
@@ -148,34 +161,28 @@ def identify_product(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
 
 def claude_respond(conversation_history: list, new_message: str) -> str:
     """Generate a sales response using Claude."""
-    history = conversation_history[-10:]  # last 10 messages for context
+    history = conversation_history[-10:]
     messages = history + [{"role": "user", "content": new_message}]
     msg = claude.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=500,
+        max_tokens=400,
         system=SUMIN_SYSTEM,
         messages=messages
     )
     return msg.content[0].text
 
-# ─── AGENTS ───────────────────────────────────────────────────────────────────
-
+# ─── AGENTS ──────────────────────────────────────────────────────────────────
 def sales_agent(from_number: str, from_name: str, text: str, state: dict):
     """Handle sales inquiries — respond to text messages."""
     log_action("SalesAgent", "processing", f"{from_name}: {text}")
-
     conv_key = from_number
     if conv_key not in state["conversations"]:
         state["conversations"][conv_key] = []
-
     history = state["conversations"][conv_key]
     response = claude_respond(history, text)
-
-    # Update history
     history.append({"role": "user", "content": text})
     history.append({"role": "assistant", "content": response})
-    state["conversations"][conv_key] = history[-20:]  # keep last 20
-
+    state["conversations"][conv_key] = history[-20:]
     wa_send(from_number, response)
     log_action("SalesAgent", "sent_response", response[:100])
     save_state(state)
@@ -183,18 +190,14 @@ def sales_agent(from_number: str, from_name: str, text: str, state: dict):
 def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str, state: dict):
     """Handle image messages — detect comprobante vs product image."""
     log_action("VisionAgent", "processing_image", f"{from_name} sent image {media_id}")
-
     image_bytes = wa_download_image(media_id)
     if not image_bytes:
         log_action("VisionAgent", "error", "Could not download image")
         return
-
-    # Check if it's a payment receipt
     if is_comprobante(image_bytes, mime_type):
         log_action("VisionAgent", "detected", "COMPROBANTE → dispatching PaymentAgent")
         payment_agent(from_number, from_name, media_id, image_bytes, state)
     else:
-        # It's a product image
         log_action("VisionAgent", "detected", "PRODUCT IMAGE → identifying")
         product_info = identify_product(image_bytes, mime_type)
         response = f"Identificamos el producto:\n\n{product_info}\n\n¿Cuántas unidades necesita y para qué ciudad es el envío?"
@@ -204,28 +207,18 @@ def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str
 def payment_agent(from_number: str, from_name: str, media_id: str, image_bytes: bytes, state: dict):
     """Handle payment comprobante — forward to groups, request invoice."""
     log_action("PaymentAgent", "processing", f"Comprobante from {from_name}")
-
-    # 1. Respond to client
     client_name = from_name.split()[0] if from_name else "estimado cliente"
     wa_send(from_number, f"Con gusto {client_name}! Recibimos su comprobante, ya lo procesamos ✅")
-
-    # 2. Forward image to Confirmación de transferencias group
-    # Group numbers need to be configured — using their IDs from WhatsApp
     CONFIRMACION_GROUP = os.environ.get("WA_CONFIRMACION_GROUP", "")
     OFICINA_SPS_NUMBER = os.environ.get("WA_OFICINA_SPS", "")
-
     if CONFIRMACION_GROUP:
         wa_forward_image(media_id, CONFIRMACION_GROUP)
         log_action("PaymentAgent", "forwarded_to_confirmacion", CONFIRMACION_GROUP)
-
-    # 3. Find related quote for this client
     order = None
     for o in state.get("orders", []):
         if o.get("client") == from_number and o.get("status") in ["quote_sent", "pending"]:
             order = o
             break
-
-    # 4. Send to Sumin Oficina SPS: comprobante + quote info
     if OFICINA_SPS_NUMBER:
         wa_forward_image(media_id, OFICINA_SPS_NUMBER)
         if order:
@@ -234,8 +227,6 @@ def payment_agent(from_number: str, from_name: str, media_id: str, image_bytes: 
             quote_info = f"📋 Pago recibido de {from_name} ({from_number})\nFavor procesar y enviar factura + guía de envío."
         wa_send(OFICINA_SPS_NUMBER, quote_info)
         log_action("PaymentAgent", "notified_oficina_sps", quote_info[:100])
-
-    # 5. Update order status
     if order:
         order["status"] = "payment_received"
         order["payment_date"] = datetime.now().isoformat()
@@ -246,49 +237,31 @@ def payment_agent(from_number: str, from_name: str, media_id: str, image_bytes: 
             "status": "payment_received",
             "payment_date": datetime.now().isoformat()
         })
-
     save_state(state)
 
 def fulfillment_agent(message_data: dict, state: dict):
-    """
-    Monitors messages FROM Sumin Oficina SPS.
-    If it contains a factura or guía, matches to client and forwards.
-    """
+    """Monitors messages FROM Sumin Oficina SPS."""
     OFICINA_SPS_NUMBER = os.environ.get("WA_OFICINA_SPS", "")
     from_number = message_data.get("from", "")
-
-    # Only process messages from Sumin Oficina SPS
     if from_number != OFICINA_SPS_NUMBER:
         return False
-
     log_action("FulfillmentAgent", "checking_message", "Message from Oficina SPS")
-
     msg_type = message_data.get("type", "")
     text = ""
     if msg_type == "text":
         text = message_data.get("text", {}).get("body", "")
-
-    # Look for factura/guía keywords
     keywords = ["factura", "guía", "guia", "envío", "envio", "tracking", "número de guía"]
     is_fulfillment = any(k in text.lower() for k in keywords) or msg_type == "document"
-
     if not is_fulfillment:
         return False
-
     log_action("FulfillmentAgent", "detected_fulfillment", f"type={msg_type}, text={text[:50]}")
-
-    # Find most recent client with payment_received status
     pending_orders = [o for o in state.get("orders", []) if o.get("status") == "payment_received"]
     if not pending_orders:
         log_action("FulfillmentAgent", "no_pending_orders", "No orders to match")
         return True
-
-    # Match to oldest pending order
     pending_orders.sort(key=lambda x: x.get("payment_date", ""))
     order = pending_orders[0]
     client_number = order.get("client")
-
-    # Forward the message to the client
     if msg_type == "document":
         media_id = message_data.get("document", {}).get("id")
         if media_id:
@@ -297,71 +270,59 @@ def fulfillment_agent(message_data: dict, state: dict):
         media_id = message_data.get("image", {}).get("id")
         if media_id:
             wa_forward_image(media_id, client_number)
-
     if text:
         wa_send(client_number, f"📦 Su pedido está en camino!\n{text}")
-
     order["status"] = "shipped"
     order["shipped_date"] = datetime.now().isoformat()
     save_state(state)
-
     log_action("FulfillmentAgent", "forwarded_to_client", f"→ {client_number}")
     return True
 
-# ─── ORCHESTRATOR ─────────────────────────────────────────────────────────────
-
+# ─── ORCHESTRATOR ────────────────────────────────────────────────────────────
 def orchestrate(message_data: dict):
     """Main dispatcher — classifies message and routes to correct agent."""
+    # Delay to feel more natural (not instant robot response)
+    time.sleep(60)
+
     state = load_state()
-
     from_number = message_data.get("from", "")
-    from_name = message_data.get("from_name", from_number)
-    msg_type = message_data.get("type", "text")
-
+    from_name   = message_data.get("from_name", from_number)
+    msg_type    = message_data.get("type", "text")
     log_action("Orchestrator", "received", f"from={from_name} type={msg_type}")
 
-    # Skip internal SUMIN numbers
     OFICINA_SPS_NUMBER = os.environ.get("WA_OFICINA_SPS", "")
 
-    # Check if message is from Oficina SPS (fulfillment flow)
     if fulfillment_agent(message_data, state):
         return
 
-    # Route by message type
     if msg_type == "image":
-        media_id = message_data.get("image", {}).get("id", "")
+        media_id  = message_data.get("image", {}).get("id", "")
         mime_type = message_data.get("image", {}).get("mime_type", "image/jpeg")
         vision_agent(from_number, from_name, media_id, mime_type, state)
 
     elif msg_type == "text":
         text = message_data.get("text", {}).get("body", "")
-
-        # Quick check: is it a Zoho code? (e.g. "abc1234") — ignore
         if re.fullmatch(r"[a-zA-Z]{2,5}\d{4,8}", text.strip()):
             log_action("Orchestrator", "skipped_zoho_code", text)
             return
-
         sales_agent(from_number, from_name, text, state)
 
     elif msg_type == "document":
-        # Could be a quote PDF or other doc — treat as sales context
-        doc = message_data.get("document", {})
+        doc      = message_data.get("document", {})
         filename = doc.get("filename", "")
         sales_agent(from_number, from_name, f"[Documento adjunto: {filename}]", state)
 
     else:
         log_action("Orchestrator", "skipped", f"unsupported type: {msg_type}")
 
-# ─── WEBHOOK ENDPOINTS ────────────────────────────────────────────────────────
-
+# ─── WEBHOOK ENDPOINTS ───────────────────────────────────────────────────────
 @app.get("/webhook")
 async def verify_webhook(request: Request):
     """Meta webhook verification."""
-    params = dict(request.query_params)
+    params    = dict(request.query_params)
     mode      = params.get("hub.mode")
     token     = params.get("hub.verify_token")
     challenge = params.get("hub.challenge")
-
     if mode == "subscribe" and token == VERIFY_TOKEN:
         log_action("Webhook", "verified", "Meta webhook verification OK")
         return PlainTextResponse(challenge)
@@ -371,26 +332,20 @@ async def verify_webhook(request: Request):
 async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
     """Receive incoming WhatsApp messages from Meta."""
     body = await request.json()
-
     try:
-        entry = body["entry"][0]
-        changes = entry["changes"][0]["value"]
+        entry    = body["entry"][0]
+        changes  = entry["changes"][0]["value"]
         messages = changes.get("messages", [])
         contacts = changes.get("contacts", [])
-
         name_map = {c["wa_id"]: c["profile"]["name"] for c in contacts}
-
         for msg in messages:
             msg["from_name"] = name_map.get(msg.get("from", ""), msg.get("from", ""))
             background_tasks.add_task(orchestrate, msg)
-
     except (KeyError, IndexError):
-        pass  # Status updates, etc.
-
+        pass
     return {"status": "ok"}
 
-# ─── DASHBOARD ────────────────────────────────────────────────────────────────
-
+# ─── DASHBOARD ───────────────────────────────────────────────────────────────
 @app.get("/dashboard")
 async def dashboard():
     """Simple HTML dashboard to monitor agents."""
@@ -399,7 +354,6 @@ async def dashboard():
             logs = json.load(f)
     except:
         logs = []
-
     try:
         with open(STATE_FILE) as f:
             state = json.load(f)
@@ -409,15 +363,10 @@ async def dashboard():
     logs_html = ""
     for entry in reversed(logs[-50:]):
         color = {
-            "SalesAgent": "#4CAF50",
-            "VisionAgent": "#2196F3",
-            "PaymentAgent": "#FF9800",
-            "FulfillmentAgent": "#9C27B0",
-            "Orchestrator": "#607D8B",
-            "WA_SEND": "#00BCD4",
-            "Webhook": "#795548"
+            "SalesAgent": "#4CAF50", "VisionAgent": "#2196F3",
+            "PaymentAgent": "#FF9800", "FulfillmentAgent": "#9C27B0",
+            "Orchestrator": "#607D8B", "WA_SEND": "#00BCD4", "Webhook": "#795548"
         }.get(entry["agent"], "#999")
-
         logs_html += f"""
         <tr>
           <td style='color:#888;font-size:12px'>{entry['timestamp'][11:19]}</td>
@@ -444,12 +393,10 @@ td{{padding:8px 10px;border-bottom:1px solid #0a2040}}
 <body>
 <h1>🤖 SUMIN Bot Dashboard</h1>
 <p style='color:#888'>Auto-refresh cada 15s | {datetime.now().strftime('%H:%M:%S')}</p>
-
 <h2>📦 Órdenes activas ({len(state.get('orders',[]))})</h2>
 <table><tr><th>Cliente</th><th>Número</th><th>Status</th><th>Cotización</th><th>Fecha pago</th></tr>
 {orders_html or "<tr><td colspan=5 style='color:#555'>Sin órdenes</td></tr>"}
 </table>
-
 <h2>📋 Log de agentes (últimas 50 acciones)</h2>
 <table><tr><th>Hora</th><th>Agente</th><th>Acción</th><th>Detalle</th></tr>
 {logs_html or "<tr><td colspan=4 style='color:#555'>Sin actividad</td></tr>"}
@@ -462,18 +409,18 @@ async def health():
 
 @app.get("/privacy")
 async def privacy():
-        return Response(content="""<!DOCTYPE html>
-        <html><head><meta charset='utf-8'><title>Politica de Privacidad - SUMIN</title>
-        <style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#333;line-height:1.6}h1{color:#1a1a2e}</style>
-        </head><body>
-        <h1>Politica de Privacidad - SUMIN Bot</h1>
-        <p><strong>Suministros Internacionales HN (SUMIN)</strong> - Ultima actualizacion: Marzo 2026</p>
-        <h2>Informacion que recopilamos</h2>
-        <p>Cuando interactua con nuestro asistente de WhatsApp, recopilamos el contenido de sus mensajes y numero de telefono unicamente para atender su solicitud comercial.</p>
-        <h2>Uso de la informacion</h2>
-        <p>La informacion se usa exclusivamente para responder consultas, procesar comprobantes de pago y coordinar pedidos. No compartimos su informacion con terceros ajenos a SUMIN.</p>
-        <h2>Seguridad</h2>
-        <p>Usamos servicios con cifrado en transito (Render, Meta WhatsApp Business API) para proteger su informacion.</p>
-        <h2>Contacto y eliminacion de datos</h2>
-        <p>Para consultas o solicitar eliminacion de datos: <a href="mailto:danielprado@suminhn.com">danielprado@suminhn.com</a></p>
-        </body></html>""", media_type="text/html")
+    return Response(content="""<!DOCTYPE html>
+<html><head><meta charset='utf-8'><title>Politica de Privacidad - SUMIN</title>
+<style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#333;line-height:1.6}h1{color:#1a1a2e}</style>
+</head><body>
+<h1>Politica de Privacidad - SUMIN Bot</h1>
+<p><strong>Suministros Internacionales HN (SUMIN)</strong> - Ultima actualizacion: Marzo 2026</p>
+<h2>Informacion que recopilamos</h2>
+<p>Cuando interactua con nuestro asistente de WhatsApp, recopilamos el contenido de sus mensajes y numero de telefono unicamente para atender su solicitud comercial.</p>
+<h2>Uso de la informacion</h2>
+<p>La informacion se usa exclusivamente para responder consultas, procesar comprobantes de pago y coordinar pedidos. No compartimos su informacion con terceros ajenos a SUMIN.</p>
+<h2>Seguridad</h2>
+<p>Usamos servicios con cifrado en transito (Render, Meta WhatsApp Business API) para proteger su informacion.</p>
+<h2>Contacto y eliminacion de datos</h2>
+<p>Para consultas o solicitar eliminacion de datos: <a href="mailto:danielprado@suminhn.com">danielprado@suminhn.com</a></p>
+</body></html>""", media_type="text/html")
