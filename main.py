@@ -1,4 +1,4 @@
-"""
+    "Sumin Oficina SPS", "Arnold Sumin",    "Sumin Oficina SPS", "Arnold Sumin",
 SUMIN WhatsApp Business API Bot
 Multi-agent system: SalesAgent, VisionAgent, PaymentAgent, FulfillmentAgent
 """
@@ -21,7 +21,7 @@ LOG_FILE          = "bot_log.json"
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 SKIP_NUMBERS = {
-    "Sumin Oficina SPS", "Arnold Sumin", "Daniel Prado",
+    "Sumin Oficina SPS", "Arnold Sumin",
     "Confirmación de transferencias Sumin", "Servicio Al Cliente Boxful"
 }
 
