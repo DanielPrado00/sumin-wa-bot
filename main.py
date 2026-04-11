@@ -1,7 +1,7 @@
-""" SUMIN / Proenco WhatsApp Business Bot
-Multi-agent system: SalesAgent, ProencoAgent, VisionAgent, PaymentAgent, FulfillmentAgent
-Structure: SUMIN and Proenco share one WhatsApp number. Routing happens on first contact.
-To split into two separate bots later: each business section is clearly delimited.
+""" SUMIN / Proenco / Takicardia WhatsApp Business Bot
+Multi-agent system: SalesAgent, ProencoAgent, TakicardiaAgent, VisionAgent, PaymentAgent, FulfillmentAgent
+Structure: SUMIN, Proenco and Takicardia share one WhatsApp number. Routing happens on first contact.
+To split into separate bots later: each business section is clearly delimited.
 """
 import os, json, re, httpx, base64, time
 from datetime import datetime
@@ -11,7 +11,7 @@ import anthropic
 
 app = FastAPI()
 
-# ─── CONFIG ──────────────────────────────────────────────────────────────────
+# ── CONFIG ──────────────────────────────────────────────────────────────────
 VERIFY_TOKEN      = os.environ["WA_VERIFY_TOKEN"]
 WA_TOKEN          = os.environ["WA_ACCESS_TOKEN"]
 PHONE_NUMBER_ID   = os.environ["WA_PHONE_NUMBER_ID"]
@@ -20,7 +20,8 @@ STATE_FILE = "orders_state.json"
 LOG_FILE   = "bot_log.json"
 
 # ─── BUSINESS NUMBERS ────────────────────────────────────────────────────────
-ALDO_NUMBER      = "50497096965"   # Ing. Aldo Villafranca - Proenco
+ALDO_NUMBER              = "50497096965"   # Ing. Aldo Villafranca - Proenco
+TAKICARDIA_CONFIRM_NUMBER = "50431447807"  # Takicardia owner – receives comprobantes
 
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
@@ -32,7 +33,7 @@ SKIP_NUMBERS = {
 }
 
 # ════════════════════════════════════════════════════════════════════════════════
-# ─── SUMIN — SYSTEM PROMPT ───────────────────────────────────────────────────
+# ─── SUMIN — SYSTEM PROMPT ──────────────────────────────────────────────────
 # ════════════════════════════════════════════════════════════════════════════════
 SUMIN_SYSTEM = """Eres un agente de ventas de Suministros Internacionales HN (SUMIN).
 Respondes en español, con un tono natural y cálido — como una persona real, NO como un robot.
@@ -124,7 +125,7 @@ REGLAS CLAVE
 - Si el cliente pregunta algo que no vendemos, díselo directamente sin rodeos.
 """
 
-# ════════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
 # ─── PROENCO — SYSTEM PROMPT ─────────────────────────────────────────────────
 # ════════════════════════════════════════════════════════════════════════════════
 PROENCO_SYSTEM = """Eres el asistente virtual de Proenco, empresa del Ing. Aldo Villafranca (Ingeniero Civil especialista en techos) en Honduras.
@@ -182,13 +183,121 @@ CUANDO TENGAS TODA LA INFO:
 Confirmá la información y decí: "Perfecto, le voy a pasar sus datos al Ing. Aldo para que le contacte y agende la visita de levantamiento. Es sin costo y sin compromiso."
 """
 
+# ════════════════════════════════════════════════════════════════════════════════
+# ─── TAKICARDIA — SYSTEM PROMPT ──────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════════
+TAKICARDIA_SYSTEM = """Eres el asistente virtual de Takicardia Taqueria, una taquería en San Pedro Sula, Honduras.
+Estás ubicados en Jardines del Valle, Blvd frente al Superzito, detrás de Galerías del Valle.
+Instagram: @takicardia_sps | WhatsApp: 8742-9043
+
+═══════════════════════════════════════
+ESTILO DE RESPUESTA
+═══════════════════════════════════════
+- Tono amigable, cálido y relajado — como el staff de una taquería cool.
+- Usa emojis con moderación para dar energía, pero no exageres.
+- Breve y claro. Una cosa a la vez.
+- Saluda con "Hola! Bienvenido a Takicardia 🌮" en el primer mensaje.
+
+═══════════════════════════════════════
+MENÚ COMPLETO
+═══════════════════════════════════════
+
+🥩 TACOS x LIBRA (incluye 20 tortillas, cebolla, cilantro, limones, salsa verde, encurtido y pico de gallo):
+- Pollo: L340
+- Chorizo Picante: L350
+- Cerdo al Pastor: L350 ⚠️ (contiene piña)
+- Res: L360
+- Mixto: L360
+
+🫓 QUESADILLAS / GRINGAS (orden de 3):
+- Pollo: L190
+- Chorizo: L190
+- Res: L210
+- Cerdo al Pastor: L200
+- Mixtas: L230
+- Quesabirrias: L230
+
+⭐ ESPECIALIDAD (4 tacos, doble tortilla — excepto Birria):
+- Pollo: L180
+- Cerdo al Pastor: L200 ⚠️ (contiene piña)
+- Chorizo Picante: L190
+- Res: L200
+- Chicharrón: L180
+- Alambre: L210
+- Birria: L225
+- Mixtos: L220
+
+🍟 ANTOJOS:
+- Nacho Grande: L240
+- Nacho Mediano: L170
+- Esquites: L70
+- Birria Noodles: L160
+- Birria Burger: L200
+- Burritos: L180
+
+🥤 BEBIDAS:
+- Refresco Personal: L35
+- Refresco Natural L40 (Maracuyá, Limonada, Limonada Rosa, Té Frío, Jamaica)
+- Agua: L20
+- Cerveza Nacional: L50
+- Cerveza Internacional: L60
+- Sangría: L140
+- Michelada Mix: L50
+
+═══════════════════════════════════════
+OPCIONES DE ENTREGA
+═══════════════════════════════════════
+1. Pedidos Ya — el cliente hace el pedido por la app de Pedidos Ya
+2. Pickup en local — pasa a recoger en Jardines del Valle (Blvd frente al Superzito, detrás de Galerías del Valle)
+3. Delivery (si aplica según la zona del cliente)
+
+═══════════════════════════════════════
+FLUJO DE PEDIDO
+═══════════════════════════════════════
+1. Saluda y muestra el menú si el cliente pide verlo.
+2. Toma el pedido completo (productos, cantidades).
+3. Pregunta cómo quiere recibirlo: ¿Pedidos Ya, pickup o delivery?
+   - Si es delivery: pedir dirección.
+   - Si es pickup: confirmar que pase al local en Jardines del Valle.
+4. Confirmar el pedido con resumen y total.
+5. Preguntar forma de pago:
+   "Para confirmar tu pedido, ¿cómo prefieres pagar?
+   💳 *Tarjeta* — te enviamos un link de pago
+   🏦 *Transferencia* — te damos el número de cuenta"
+6. Según respuesta:
+   - Tarjeta: "Perfecto, en un momento te enviamos el link de pago 🔗"
+   - Transferencia: "Aquí los datos para transferencia:
+     Banco Atlántida — Cuenta: [CUENTA_TAKICARDIA]
+     A nombre de: Takicardia Taqueria
+     Monto exacto: L[TOTAL]
+     Al hacer la transferencia, envíanos el comprobante aquí y procesamos tu pedido de inmediato ✅"
+
+IMPORTANTE: Si el cliente quiere pagar con Tarjeta, solo confirma que le enviarás el link — no lo generes tú, el staff lo enviará manualmente.
+
+═══════════════════════════════════════
+CUANDO EL CLIENTE MANDA COMPROBANTE
+═══════════════════════════════════════
+Responde: "¡Listo [nombre]! Recibimos tu comprobante, tu pedido está siendo preparado 🌮🔥"
+(El sistema enviará el comprobante + detalles del pedido al equipo de Takicardia automáticamente.)
+
+═══════════════════════════════════════
+REGLAS CLAVE
+═══════════════════════════════════════
+- No inventes precios ni items que no están en el menú.
+- Si el cliente pregunta por algo que no está en el menú: "Por el momento no tenemos ese plato, pero tenemos [sugerencia similar]."
+- Si menciona alergia a la piña: advertirle que el Pastor contiene piña.
+- No hagas más de una pregunta a la vez.
+- Sé eficiente — el cliente quiere su taco rápido 🌮
+"""
+
 # ─── ROUTING ─────────────────────────────────────────────────────────────────
-ROUTING_QUESTION = """Hola buen día! Tenemos dos líneas de servicio:
+ROUTING_QUESTION = """Hola buen día! Tenemos tres líneas de servicio:
 
 1️⃣ *SUMIN* — Productos de soldadura y equipo de protección personal (EPP)
 2️⃣ *Proenco* — Cambio completo de techo (Standing Seam, con garantía)
+3️⃣ *Takicardia Taqueria* — Tacos, birria, gringas y más 🌮
 
-¿En cuál de los dos le podemos ayudar?"""
+¿En cuál de los tres le podemos ayudar?"""
 
 SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante',
                    'chaqueta', 'alambre', 'oxicorte', 'sumin', 'epp', 'protección',
@@ -196,16 +305,23 @@ SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante'
 PROENCO_KEYWORDS = ['techo', 'lámina', 'gotera', 'proenco', 'standing', 'nave',
                     'bodega', 'cubierta', 'zinc', 'impermeabilizar', 'aislamiento',
                     'lámina de techo', 'cambio de techo', 'goteras', 'lluvia']
+TAKICARDIA_KEYWORDS = ['taco', 'tacos', 'birria', 'gringa', 'quesadilla', 'quesabirria',
+                       'takicardia', 'pastor', 'chorizo', 'birria burger', 'nacho',
+                       'esquites', 'burritos', 'michelada', 'sangria', 'antojo',
+                       'pedido', 'orden', 'menu', 'menú', 'comida', 'taqueria',
+                       'taquería', 'alambre', 'chicharrón', 'chicharron']
 
 def classify_business(text: str):
-    """Returns 'sumin', 'proenco', or None if ambiguous."""
+    """Returns 'sumin', 'proenco', 'takicardia', or None if ambiguous."""
     t = text.lower().strip()
-    is_sumin   = any(k in t for k in SUMIN_KEYWORDS)  or t in ['1', '1️⃣']
-    is_proenco = any(k in t for k in PROENCO_KEYWORDS) or t in ['2', '2️⃣']
-    if is_sumin and not is_proenco:
-        return 'sumin'
-    if is_proenco and not is_sumin:
-        return 'proenco'
+    is_sumin      = any(k in t for k in SUMIN_KEYWORDS)      or t in ['1', '1️⃣']
+    is_proenco    = any(k in t for k in PROENCO_KEYWORDS)    or t in ['2', '2️⃣']
+    is_takicardia = any(k in t for k in TAKICARDIA_KEYWORDS) or t in ['3', '3️⃣']
+    matched = sum([is_sumin, is_proenco, is_takicardia])
+    if matched == 1:
+        if is_sumin:      return 'sumin'
+        if is_proenco:    return 'proenco'
+        if is_takicardia: return 'takicardia'
     return None
 
 def get_conv_meta(state: dict, conv_key: str) -> dict:
@@ -222,7 +338,7 @@ def load_state():
         with open(STATE_FILE) as f:
             return json.load(f)
     except:
-        return {"orders": [], "conversations": {}, "conv_meta": {}}
+        return {"orders": [], "conversations": {}, "conv_meta": {}, "taki_orders": []}
 
 def save_state(state):
     with open(STATE_FILE, "w") as f:
@@ -481,11 +597,89 @@ def proenco_agent(from_number: str, from_name: str, text: str, state: dict):
     save_state(state)
 
 # ════════════════════════════════════════════════════════════════════════════════
+# ─── TAKICARDIA AGENTS ───────────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════════
+
+def extract_taki_order_summary(history: list) -> str:
+    """Use Haiku to extract a brief order summary from conversation history."""
+    if len(history) < 4:
+        return "Pedido en progreso"
+    conv_text = "\n".join(
+        f"{'Cliente' if m['role']=='user' else 'Bot'}: {m['content']}"
+        for m in history[-12:]
+    )
+    msg = claude.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=200,
+        messages=[{"role": "user", "content": f"""De esta conversación de WhatsApp de una taquería, extrae el resumen del pedido del cliente en 2-3 líneas.
+Incluye: qué pidió, cantidad, modo de entrega (pickup/delivery/Pedidos Ya), y total si se mencionó.
+Si no hay pedido claro, responde: "Consulta general"
+
+Conversación:
+{conv_text}"""}]
+    )
+    return msg.content[0].text.strip()
+
+def taki_comprobante_agent(from_number: str, from_name: str, media_id: str, image_bytes: bytes, state: dict):
+    """Takicardia: Handle payment comprobante — acknowledge client + forward to owner."""
+    log_action("TakicardiaAgent", "comprobante_received", f"From {from_name} ({from_number})")
+
+    first_name = from_name.split()[0] if from_name else "amigo"
+    wa_send(from_number, f"¡Listo {first_name}! Recibimos tu comprobante, tu pedido está siendo preparado 🌮🔥")
+
+    # Get order summary from conversation history
+    history = state.get("conversations", {}).get(from_number, [])
+    order_summary = extract_taki_order_summary(history)
+
+    # Forward comprobante image to Takicardia owner
+    wa_forward_image(media_id, TAKICARDIA_CONFIRM_NUMBER)
+
+    # Send order details as text to owner
+    owner_msg = (
+        f"🌮 *Nuevo pedido confirmado — Takicardia*\n\n"
+        f"👤 *Cliente:* {from_name}\n"
+        f"📞 *Número:* +{from_number}\n"
+        f"📋 *Pedido:*\n{order_summary}\n\n"
+        f"💳 *Pago:* Comprobante de transferencia recibido ✅"
+    )
+    wa_send(TAKICARDIA_CONFIRM_NUMBER, owner_msg)
+
+    # Save order record
+    if 'taki_orders' not in state:
+        state['taki_orders'] = []
+    state['taki_orders'].append({
+        "client": from_number,
+        "name": from_name,
+        "status": "payment_received",
+        "summary": order_summary,
+        "payment_date": datetime.now().isoformat()
+    })
+    save_state(state)
+    log_action("TakicardiaAgent", "order_confirmed", f"{from_name}: {order_summary[:80]}")
+
+def takicardia_agent(from_number: str, from_name: str, text: str, state: dict):
+    """Takicardia: Handle food ordering conversation."""
+    log_action("TakicardiaAgent", "processing", f"{from_name}: {text}")
+
+    if from_number not in state["conversations"]:
+        state["conversations"][from_number] = []
+    history = state["conversations"][from_number]
+
+    response = claude_respond(TAKICARDIA_SYSTEM, history, text)
+    history.append({"role": "user", "content": text})
+    history.append({"role": "assistant", "content": response})
+    state["conversations"][from_number] = history[-20:]
+
+    wa_send(from_number, response)
+    log_action("TakicardiaAgent", "sent_response", response[:100])
+    save_state(state)
+
+# ════════════════════════════════════════════════════════════════════════════════
 # ─── ORCHESTRATOR ────────────────────────────────────────────────────────────
 # ════════════════════════════════════════════════════════════════════════════════
 
 def orchestrate(message_data: dict):
-    """Main dispatcher — routes to SUMIN or Proenco based on conversation context."""
+    """Main dispatcher — routes to SUMIN, Proenco, or Takicardia based on conversation context."""
     time.sleep(60)
 
     state     = load_state()
@@ -506,7 +700,16 @@ def orchestrate(message_data: dict):
     if msg_type == "image":
         media_id  = message_data.get("image", {}).get("id", "")
         mime_type = message_data.get("image", {}).get("mime_type", "image/jpeg")
-        if business == 'proenco':
+
+        if business == 'takicardia':
+            # Download and check if it's a payment comprobante
+            image_bytes = wa_download_image(media_id)
+            if image_bytes and is_comprobante(image_bytes, mime_type):
+                taki_comprobante_agent(from_number, from_name, media_id, image_bytes, state)
+            else:
+                # Non-comprobante image — let the agent handle it contextually
+                takicardia_agent(from_number, from_name, "[El cliente envió una imagen]", state)
+        elif business == 'proenco':
             proenco_agent(from_number, from_name, "[El cliente envió una foto de su techo actual]", state)
         else:
             vision_agent(from_number, from_name, media_id, mime_type, state)
@@ -547,8 +750,11 @@ def orchestrate(message_data: dict):
             elif any(k in text.lower() for k in ['2', 'segundo', 'techo', 'proenco', 'lámina', 'gotera']):
                 meta['business'] = 'proenco'
                 business = 'proenco'
+            elif any(k in text.lower() for k in ['3', 'tercero', 'taco', 'tacos', 'takicardia', 'comida', 'birria']):
+                meta['business'] = 'takicardia'
+                business = 'takicardia'
             else:
-                wa_send(from_number, "Por favor indíquenos: ¿soldadura/EPP (1) o cambio de techo (2)?")
+                wa_send(from_number, "Por favor indíquenos: ¿soldadura/EPP (1), cambio de techo (2) o Takicardia Taqueria (3)?")
                 save_state(state)
                 return
             save_state(state)
@@ -558,11 +764,15 @@ def orchestrate(message_data: dict):
             sales_agent(from_number, from_name, text, state)
         elif business == 'proenco':
             proenco_agent(from_number, from_name, text, state)
+        elif business == 'takicardia':
+            takicardia_agent(from_number, from_name, text, state)
 
     elif msg_type == "document":
         filename = message_data.get("document", {}).get("filename", "")
         if business == 'proenco':
             proenco_agent(from_number, from_name, f"[Documento adjunto: {filename}]", state)
+        elif business == 'takicardia':
+            takicardia_agent(from_number, from_name, f"[Documento adjunto: {filename}]", state)
         else:
             sales_agent(from_number, from_name, f"[Documento adjunto: {filename}]", state)
 
@@ -607,15 +817,15 @@ async def dashboard():
     try:
         with open(STATE_FILE) as f: state = json.load(f)
     except:
-        state = {"orders": [], "conversations": {}, "conv_meta": {}}
+        state = {"orders": [], "conversations": {}, "conv_meta": {}, "taki_orders": []}
 
     logs_html = ""
     for entry in reversed(logs[-50:]):
         color = {
             "SalesAgent": "#4CAF50", "ProencoAgent": "#FF6B35",
-            "VisionAgent": "#2196F3", "PaymentAgent": "#FF9800",
-            "FulfillmentAgent": "#9C27B0", "Orchestrator": "#607D8B",
-            "WA_SEND": "#00BCD4", "Webhook": "#795548"
+            "TakicardiaAgent": "#E91E63", "VisionAgent": "#2196F3",
+            "PaymentAgent": "#FF9800", "FulfillmentAgent": "#9C27B0",
+            "Orchestrator": "#607D8B", "WA_SEND": "#00BCD4", "Webhook": "#795548"
         }.get(entry["agent"], "#999")
         logs_html += f"""<tr>
           <td style='color:#888;font-size:12px'>{entry['timestamp'][11:19]}</td>
@@ -626,9 +836,12 @@ async def dashboard():
 
     # Conversations by business
     conv_meta = state.get("conv_meta", {})
-    sumin_convs   = sum(1 for v in conv_meta.values() if v.get('business') == 'sumin')
-    proenco_convs = sum(1 for v in conv_meta.values() if v.get('business') == 'proenco')
-    leads_sent    = sum(1 for v in conv_meta.values() if v.get('lead_sent'))
+    sumin_convs     = sum(1 for v in conv_meta.values() if v.get('business') == 'sumin')
+    proenco_convs   = sum(1 for v in conv_meta.values() if v.get('business') == 'proenco')
+    taki_convs      = sum(1 for v in conv_meta.values() if v.get('business') == 'takicardia')
+    leads_sent      = sum(1 for v in conv_meta.values() if v.get('lead_sent'))
+    taki_orders     = state.get("taki_orders", [])
+    taki_paid       = sum(1 for o in taki_orders if o.get('status') == 'payment_received')
 
     orders_html = ""
     status_icons = {"quote_sent": "📄", "payment_received": "💰", "shipped": "📦", "pending": "⏳"}
@@ -636,30 +849,41 @@ async def dashboard():
         icon = status_icons.get(o.get("status", ""), "❓")
         orders_html += f"<tr><td>{o.get('name','')}</td><td>{o.get('client','')}</td><td>{icon} {o.get('status','')}</td><td>{o.get('payment_date','')[:10]}</td></tr>"
 
+    taki_orders_html = ""
+    for o in taki_orders:
+        taki_orders_html += f"<tr><td>{o.get('name','')}</td><td>{o.get('client','')}</td><td>💰 {o.get('status','')}</td><td>{o.get('summary','')[:60]}</td><td>{o.get('payment_date','')[:10]}</td></tr>"
+
     return Response(content=f"""<!DOCTYPE html>
-<html><head><meta charset='utf-8'><title>SUMIN / Proenco Bot</title>
+<html><head><meta charset='utf-8'><title>SUMIN / Proenco / Takicardia Bot</title>
 <meta http-equiv='refresh' content='15'>
 <style>
 body{{font-family:sans-serif;background:#1a1a2e;color:#eee;margin:0;padding:20px}}
 h1{{color:#4CAF50}}h2{{color:#aaa;font-size:16px}}
-.stats{{display:flex;gap:16px;margin-bottom:20px}}
-.stat{{background:#16213e;border-radius:8px;padding:14px 20px;flex:1;text-align:center}}
+.stats{{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap}}
+.stat{{background:#16213e;border-radius:8px;padding:14px 20px;flex:1;text-align:center;min-width:120px}}
 .stat .n{{font-size:28px;font-weight:bold;color:#4CAF50}}
 .stat .l{{font-size:12px;color:#888}}
 .proenco .n{{color:#FF6B35}}
-table{{width:100%;border-collapse:collapse;background:#16213e;border-radius:8px;overflow:hidden;margin-bottom:20py}}
+.taki .n{{color:#E91E63}}
+table{{width:100%;border-collapse:collapse;background:#16213e;border-radius:8px;overflow:hidden;margin-bottom:20px}}
 th{{background:#0f3460;padding:10px;text-align:left;font-size:13px}}
 td{{padding:8px 10px;border-bottom:1px solid #0a2040}}
 </style></head>
 <body>
-<h1>🤖 SUMIN / Proenco Bot Dashboard</h1>
+<h1>🤖 SUMIN / Proenco / Takicardia Bot Dashboard</h1>
 <p style='color:#888'>Auto-refresh 15s | {datetime.now().strftime('%H:%M:%S')}</p>
 <div class='stats'>
   <div class='stat'><div class='n'>{sumin_convs}</div><div class='l'>Chats SUMIN</div></div>
   <div class='stat proenco'><div class='n'>{proenco_convs}</div><div class='l'>Chats Proenco</div></div>
-  <div class='stat proenco'><div class='n'>{leads_sent}</div><div class='l'>Leads enviados a Aldo</div></div>
+  <div class='stat proenco'><div class='n'>{leads_sent}</div><div class='l'>Leads → Aldo</div></div>
+  <div class='stat taki'><div class='n'>{taki_convs}</div><div class='l'>Chats Takicardia</div></div>
+  <div class='stat taki'><div class='n'>{taki_paid}</div><div class='l'>Pedidos Takicardia</div></div>
   <div class='stat'><div class='n'>{len(state.get("orders",[]))}</div><div class='l'>Órdenes SUMIN</div></div>
 </div>
+<h2>🌮 Pedidos Takicardia</h2>
+<table><tr><th>Cliente</th><th>Número</th><th>Status</th><th>Pedido</th><th>Fecha</th></tr>
+{taki_orders_html or "<tr><td colspan=5 style='color:#555'>Sin pedidos</td></tr>"}
+</table>
 <h2>📦 Órdenes SUMIN</h2>
 <table><tr><th>Cliente</th><th>Número</th><th>Status</th><th>Fecha pago</th></tr>
 {orders_html or "<tr><td colspan=4 style='color:#555'>Sin órdenes</td></tr>"}
@@ -681,7 +905,7 @@ async def privacy():
 <style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#333;line-height:1.6}h1{color:#1a1a2e}</style>
 </head><body>
 <h1>Politica de Privacidad</h1>
-<p><strong>Suministros Internacionales HN (SUMIN) / Proenco</strong> - Marzo 2026</p>
+<p><strong>Suministros Internacionales HN (SUMIN) / Proenco / Takicardia Taqueria</strong> - Abril 2026</p>
 <p>Recopilamos el contenido de mensajes y número de teléfono únicamente para atender su solicitud comercial. No compartimos su información con terceros ajenos a nuestras empresas.</p>
 <p>Contacto: <a href="mailto:danielprado@suminhn.com">danielprado@suminhn.com</a></p>
 </body></html>""", media_type="text/html")
