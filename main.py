@@ -1,7 +1,7 @@
 """ SUMIN WhatsApp Business Bot
 Standalone bot for welding supplies and personal protection equipment (EPP)
 """
-import os, json, re, httpx, base64, time
+import os, json, re, httpx, base64, time, html as html_lib
 from datetime import datetime
 from fastapi import FastAPI, Request, Response, BackgroundTasks
 from fastapi.responses import PlainTextResponse
@@ -63,12 +63,26 @@ FLUJO SEGÃN TIPO DE CONSULTA
    - Equipo de protecciÃ³n â caretas, guantes, chaquetas, kits
 
 2. ELECTRODOS:
-   Preguntar: diÃ¡metro y tamaÃ±o de caja (10 lbs o 50 lbs).
-   Precios electrodo 6011:
-     - Caja 10 lbs: L517.50
-     - Caja 50 lbs: L2,587.50
-   DiÃ¡metros disponibles SOLO: 3/32", 1/8", 5/32". NO hay 1/16" ni 3/16".
-   Para otros electrodos (7018, etc.) sin precio conocido: "No tengo ese precio aquÃ­, puede llamarnos o pasar por tienda."
+   Preguntar: tipo, diÃ¡metro y tamaÃ±o de caja. Los electrodos se venden por lb suelta o en cajas de 10 lbs / 50 lbs.
+   El sistema consulta Zoho en tiempo real â si ves [INVENTARIO ZOHO] con precio, Ãºsalo directamente.
+
+   PRECIOS DE REFERENCIA â HIERROS DULCES (marca A.A., ISV incluido):
+   - E6010: caja 10 lbs = L517.50 | caja 50 lbs = L2,587.50   (3/32", 1/8", 5/32")
+   - E6011: caja 10 lbs = L517.50 | caja 50 lbs = L2,587.50   (3/32", 1/8", 5/32")
+   - E6013: caja 10 lbs = L437.00 | caja 50 lbs = L2,185.00   (3/32", 1/8") â tambiÃ©n hay marcas Lincoln, W.A.
+   - E7018: caja 10 lbs = L414.00 | caja 50 lbs = L2,070.00   (3/32", 1/8", 5/32")
+   - E7024: caja 10 lbs = L460.00 | caja 50 lbs = L2,300.00   (1/8")
+
+   TIPOS ESPECIALES (tambiÃ©n los manejamos â pedir precio exacto al asesor):
+   - Inoxidable: E308-16, E309-16, E310-16, E312-16, E316-16, Tensile Weld
+   - Revestimientos duros / hardfacing: E-300, E-900, Chrome Carb, Everwear 800, American Hard Plus, American Sugar
+   - Aluminio: AL-345, AL-4043
+   - Hierro colado: NI-55, NI-99
+   - Bajo hidrÃ³geno: E-8018, E-9018, E-11018M, E-12018M
+   - Biselar/cortar: Chamfer Rod
+   Para CUALQUIER electrodo especial o precio exacto que no tengas: â comunicar al +504 3334-0477
+
+   Si el cliente pide FOTO de electrodos â "Para fotos y detalles tÃ©cnicos de electrodos puede comunicarse al +504 3334-0477"
 
 3. CARETAS / EQUIPO DE PROTECCIÃN:
    Preguntar primero: "Â¿La ocupa para uso pesado o uso bÃ¡sico?"
@@ -85,23 +99,36 @@ FLUJO SEGÃN TIPO DE CONSULTA
    - SafeCut Defender 450 (chaqueta/kit de corte): L13,383.70
    - Guantes, chaquetas de cuero: "Puede pasar por tienda o llamarnos para ver existencias y precios."
 
-   Ofrecer siempre: "Si quiere le mando foto o video del producto."
+   Cuando el cliente pide foto de caretas u otro EPP: "Con gusto le mando fotos."
+   (El bot enviarÃ¡ las fotos automÃ¡ticamente â no necesitas decir nada mÃ¡s.)
 
 4. MICROALAMBRE / ALAMBRE MIG:
    Preguntar: Â¿con gas o sin gas? Â¿quÃ© diÃ¡metro? Â¿marca actual?
+   TIPOS DISPONIBLES (marca American Alloy y Washington Alloy):
+   - ER70s-6 (acero al carbono, MIG con gas): 0.035" â rollo 1 lb o rollo 33 lbs
+   - E71T-GS (flux core, sin gas): 0.030" y 0.035"
+   - 600HT (flux core): 0.045" â rollo 33 lbs
+   - Alambre aluminio ER4043/ER5356: 0.035"
+   - Alambre acero inoxidable: 0.035"
+   Para precio exacto: preguntar diÃ¡metro y presentaciÃ³n (1 lb o 33 lbs), luego consultar tienda o +504 3334-0477.
    Si el cliente tiene el producto actual: pedirle foto para identificar la referencia correcta.
-   Sin precio conocido: dar precio en tienda o pedir que llame.
 
-5. OXICORTE / EQUIPO DE GAS:
-   Kits disponibles â ofrecer enviar foto + descripciÃ³n + precio mensual.
-   "Le mando foto del kit para que lo vea."
+5. VARILLAS (soldadura autÃ³gena y TIG):
+   Disponibles: aluminio (liso y con fundente), acero inoxidable, bronce (lisa y revestida), hierro.
+   Para precios y diÃ¡metros: llamar a tienda o +504 3334-0477.
+
+6. OXICORTE / EQUIPO DE GAS:
+   Kits disponibles:
+   - Equipo Journeyman II Victor (profesional, servicio pesado)
+   - Metal Power Super V-450 Deluxe (heavy duty, con maletÃ­n)
+   Incluyen: cortador, maneral, reguladores, mangueras, antorcha, boquillas.
+   Para precios: "Le comparto el precio â pÃ¡sese por tienda o nos llama."
 
 6. UBICACIÃN / DIRECCIÃN:
    ð San Pedro Sula: 1ra calle, entre 1ra y 2da avenida, Edificio Metrocentro, Local #3
    https://maps.app.goo.gl/KUH7HU2idddQXCSPA
    ð Tegucigalpa (ComayagÃ¼ela): 8 calle, entre 3ra y 4ta avenida, frente a cafeterÃ­a Macao, a la par del nuevo estacionamiento del Hospital PoliclÃ­nica
    https://maps.app.goo.gl/2iNJW6wMDtKn68cg8
-   Preguntar: "Â¿En cuÃ¡l ciudad le gustarÃ­a visitarnos?"
 
 7. ENVÃOS:
    "Si es fuera de San Pedro Sula y Tegucigalpa, se le hace su envÃ­o mediante Expreco."
@@ -121,14 +148,103 @@ REGLAS CLAVE
 - Si mandÃ³ comprobante de pago: "Con gusto [nombre]! Recibimos su comprobante, ya lo procesamos â"
 - CÃ³digo Zoho (formato letras+nÃºmeros como "abc123"): NO es comprobante, ignorar.
 - Si mandÃ³ imagen de producto: identificar quÃ© es y responder con disponibilidad/precio.
-- NUNCA inventes precios. Si no lo sabÃ©s: "No tengo ese precio aquÃ­ ahora mismo, puede llamarnos o pasar por tienda."
+- NUNCA inventes precios. Si no lo sabÃ©s con certeza: "No tengo ese precio aquÃ­ ahora mismo, puede llamarnos o pasar por tienda."
 - NO prometas enviar cotizaciÃ³n formal si no podÃ©s.
 - Si el cliente pregunta algo que no vendemos, dÃ­selo directamente sin rodeos.
+- CIUDAD (San Pedro / Tegucigalpa): SOLO pregunta "Â¿EstÃ¡ en San Pedro o Tegucigalpa?" cuando el cliente ya confirmÃ³ que quiere el producto (dijo "lo llevo", "me interesa", "cuÃ¡nto serÃ­a en total", "cÃ³mo pago", etc.). NO preguntes la ciudad al inicio de la consulta ni durante la presentaciÃ³n de productos.
 """
 
 SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante',
                    'chaqueta', 'alambre', 'oxicorte', 'sumin', 'epp', 'protecciÃ³n',
                    'delantal', 'escudo', 'varilla', 'disco', 'lija', 'esmeril']
+
+# âââ PRODUCT IMAGES ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# URLs de imÃ¡genes hospedadas en GitHub (raw.githubusercontent.com).
+# Para agregar fotos: corre upload_photos.py y pega las URLs generadas aquÃ­.
+# Formato: "keyword": ["url1", "url2", ...]
+PRODUCT_IMAGES: dict[str, list[str]] = {
+    # Se puebla con upload_photos.py â ver instrucciones abajo
+}
+
+# Palabras clave para detectar solicitudes de foto
+PHOTO_KEYWORDS = ["foto", "fotos", "imagen", "imÃ¡gen", "ver", "manda", "mandame",
+                  "mÃ¡ndame", "muÃ©strame", "muestrame", "como es", "cÃ³mo es", "pic", "picture"]
+
+# Productos que se REDIRIGEN al telÃ©fono (no tenemos fotos del bot)
+ELECTRODE_REDIRECT_PHONE = "+504 3334-0477"
+
+def detect_photo_request(text: str) -> str | None:
+    """Detect if user is asking for product photos. Returns product keyword or None."""
+    text_lower = text.lower()
+    if not any(w in text_lower for w in PHOTO_KEYWORDS):
+        return None
+    # Map product keywords to PRODUCT_IMAGES keys
+    product_map = {
+        "careta":      "caretas",
+        "caretas":     "caretas",
+        "casco":       "caretas",
+        "guante":      "guantes",
+        "guantes":     "guantes",
+        "chaqueta":    "chaqueta",
+        "delantal":    "delantal",
+        "gafa":        "gafas",
+        "gafas":       "gafas",
+        "anteojos":    "gafas",
+        "chispero":    "chisperos",
+        "chisperos":   "chisperos",
+        "boquilla":    "boquillas",
+        "boquillas":   "boquillas",
+        "tobera":      "toberas_mig",
+        "toberas":     "toberas_mig",
+        "manguera":    "manguera_argon",
+        "regulador":   "reguladores",
+        "antorcha":    "antorchas",
+        "delantal":    "delantal",
+        "respirador":  "respiradores",
+        "manga":       "mangas",
+        "mangas":      "mangas",
+        "kit":         "equipo_oxicorte",
+        "oxicorte":    "equipo_oxicorte",
+    }
+    for keyword, img_key in product_map.items():
+        if keyword in text_lower:
+            return img_key
+    return None
+
+def send_product_photos(to: str, product_key: str) -> bool:
+    """Send product photos via WhatsApp. Returns True if photos were sent."""
+    # Electrodes â redirect to phone, don't send
+    if "electrodo" in product_key or "electrode" in product_key:
+        wa_send(to, f"Para fotos de electrodos puede comunicarse al {ELECTRODE_REDIRECT_PHONE} ð")
+        return True
+    urls = PRODUCT_IMAGES.get(product_key, [])
+    if not urls:
+        return False  # No photos configured yet
+    caption_map = {
+        "caretas":        "Caretas para soldadura â SUMIN",
+        "guantes":        "Guantes de cuero para soldadura â SUMIN",
+        "chaqueta":       "Chaqueta de cuero para soldadura â SUMIN",
+        "delantal":       "Delantal de cuero â SUMIN",
+        "gafas":          "Gafas para soldar â SUMIN",
+        "chisperos":      "Chisperos â SUMIN",
+        "boquillas":      "Boquillas â SUMIN",
+        "toberas_mig":    "Toberas para MIG â SUMIN",
+        "manguera_argon": "Manguera para argÃ³n â SUMIN",
+        "reguladores":    "Reguladores â SUMIN",
+        "antorchas":      "Antorchas â SUMIN",
+        "respiradores":   "Respiradores â SUMIN",
+        "mangas":         "Mangas para soldador â SUMIN",
+        "equipo_oxicorte":"Equipo de oxicorte â SUMIN",
+    }
+    caption = caption_map.get(product_key, "SUMIN â Suministros Internacionales HN")
+    sent = 0
+    for url in urls[:3]:  # Max 3 photos per product
+        result = wa_send_image_url(to, url, caption if sent == 0 else "")
+        if result.get("messages"):
+            sent += 1
+        time.sleep(0.5)
+    log_action("PhotoAgent", "sent_photos", f"{product_key}: {sent} fotos â {to}")
+    return sent > 0
 
 # âââ HELPERS âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 def load_state():
@@ -168,6 +284,20 @@ def wa_send(to: str, text: str):
     body = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
     r = httpx.post(url, json=body, headers=headers, timeout=15)
     log_action("WA_SEND", f"â {to}", text[:100])
+    return r.json()
+
+def wa_send_image_url(to: str, url: str, caption: str = ""):
+    """Send a product image from a public URL via WhatsApp."""
+    wa_url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
+    headers = {"Authorization": f"Bearer {WA_TOKEN}", "Content-Type": "application/json"}
+    body = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "image",
+        "image": {"link": url, "caption": caption},
+    }
+    r = httpx.post(wa_url, json=body, headers=headers, timeout=15)
+    log_action("WA_SEND", f"imageâ{to}", url[:80])
     return r.json()
 
 def wa_forward_image(media_id: str, to: str):
@@ -264,7 +394,8 @@ def get_zoho_access_token() -> str | None:
 
 def zoho_check_item(query: str) -> dict | None:
     """Search Zoho Books for an active item matching query.
-    Returns {"found": True, "names": [...]} or {"found": False} or None on error.
+    Returns {"found": True, "names": [...], "rate": float, "unit": str}
+         or {"found": False} or None on error.
     """
     token = get_zoho_access_token()
     if not token or not ZOHO_ORG_ID:
@@ -283,8 +414,11 @@ def zoho_check_item(query: str) -> dict | None:
         items = r.json().get("items", [])
         if items:
             names = [i.get("item_name", "") for i in items[:4]]
-            log_action("ZohoAPI", "item_found", f"'{query}' â {names}")
-            return {"found": True, "names": names}
+            # Get the rate (price before ISV) from the best match
+            rate  = items[0].get("rate", 0.0)
+            unit  = items[0].get("unit", "")
+            log_action("ZohoAPI", "item_found", f"'{query}' â {names} rate={rate}")
+            return {"found": True, "names": names, "rate": rate, "unit": unit}
         log_action("ZohoAPI", "item_not_found", f"'{query}' â 0 results")
         return {"found": False}
     except Exception as e:
@@ -319,9 +453,16 @@ def zoho_inventory_context(text: str) -> str:
             return ""   # Zoho unreachable â don't alter response
         if result["found"]:
             names_str = ", ".join(result["names"])
+            rate      = result.get("rate", 0.0)
+            unit      = result.get("unit", "")
+            price_ctx = ""
+            if rate and rate > 0:
+                rate_with_isv = round(rate * 1.15, 2)
+                price_ctx = (f" Precio base Zoho: L{rate}/{unit} (+ ISV 15% = L{rate_with_isv}/{unit}). "
+                             f"Usa este precio como referencia REAL al responder.")
             return (f"\n\n[INVENTARIO ZOHO â DATO REAL]: El producto '{extraction}' SÃ existe en nuestro "
-                    f"catÃ¡logo activo. ArtÃ­culos encontrados: {names_str}. "
-                    f"Confirma disponibilidad al cliente SIN mencionar cantidades exactas de stock.")
+                    f"catÃ¡logo activo. ArtÃ­culos: {names_str}.{price_ctx} "
+                    f"Confirma disponibilidad y da precio con ISV incluido.")
         else:
             return (f"\n\n[INVENTARIO ZOHO â DATO REAL]: El producto '{extraction}' NO aparece en "
                     f"nuestro catÃ¡logo activo de Zoho Books. Informa amablemente que no manejamos "
@@ -339,6 +480,12 @@ def sales_agent(from_number: str, from_name: str, text: str, state: dict):
     log_action("SalesAgent", "processing", f"{from_name}: {text}")
     if from_number not in state["conversations"]:
         state["conversations"][from_number] = []
+    # Track contact name and last active time
+    meta = get_conv_meta(state, from_number)
+    if from_name and from_name != from_number:
+        meta["name"] = from_name
+    meta["last_active"] = datetime.now().isoformat()
+    meta["last_msg"] = text[:80]
     history = state["conversations"][from_number]
     # Inject live Zoho inventory data before Claude responds
     zoho_ctx = zoho_inventory_context(text)
@@ -445,7 +592,7 @@ def orchestrate(message_data: dict):
         vision_agent(from_number, from_name, media_id, mime_type, state)
         return
 
-    # ââ TEXT HANDLING ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+    # ââ TEXT HANDLING âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
     if msg_type == "text":
         text = message_data.get("text", {}).get("body", "")
 
@@ -453,6 +600,20 @@ def orchestrate(message_data: dict):
         if re.fullmatch(r"[a-zA-Z]{2,5}\d{4,8}", text.strip()):
             log_action("Orchestrator", "skipped_zoho_code", text)
             return
+
+        # Check for photo request â send images before/alongside text response
+        photo_key = detect_photo_request(text)
+        if photo_key:
+            if "electrodo" in text.lower() or any(e in text.lower() for e in ["6010","6011","6013","7018","7024","tungsteno","inox"]):
+                # Electrode photos â redirect to phone
+                wa_send(from_number, f"Para fotos de electrodos puede comunicarse al {ELECTRODE_REDIRECT_PHONE} ð")
+                return
+            photos_sent = send_product_photos(from_number, photo_key)
+            if photos_sent:
+                # Also let the sales agent respond with text context
+                sales_agent(from_number, from_name, text, state)
+                return
+            # If no photos available yet, fall through to normal sales_agent
 
         sales_agent(from_number, from_name, text, state)
         return
@@ -496,6 +657,19 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
     return {"status": "ok"}
 
 # âââ DASHBOARD âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+def _fmt_dashboard_time(iso: str) -> str:
+    """Format ISO timestamp for dashboard display."""
+    if not iso:
+        return ""
+    try:
+        d = datetime.fromisoformat(iso)
+        now = datetime.now()
+        if (now - d).days == 0:
+            return d.strftime("%H:%M")
+        return d.strftime("%d/%m")
+    except:
+        return iso[11:16]
+
 @app.get("/dashboard")
 async def dashboard():
     try:
@@ -507,61 +681,172 @@ async def dashboard():
     except:
         state = {"orders": [], "conversations": {}, "conv_meta": {}}
 
+    conversations = state.get("conversations", {})
+    conv_meta     = state.get("conv_meta", {})
+
+    # Build contact list sorted by most recent activity
+    sorted_phones = sorted(
+        conversations.keys(),
+        key=lambda p: conv_meta.get(p, {}).get("last_active", ""),
+        reverse=True
+    )
+
+    contacts_html = ""
+    for phone in sorted_phones:
+        msgs  = conversations.get(phone, [])
+        meta  = conv_meta.get(phone, {})
+        name  = html_lib.escape(meta.get("name", phone))
+        last  = _fmt_dashboard_time(meta.get("last_active", ""))
+        preview_raw = ""
+        if msgs:
+            last_msg = msgs[-1]
+            prefix = "ð¤ " if last_msg["role"] == "assistant" else "ð¤ "
+            preview_raw = prefix + last_msg["content"][:55]
+        preview = html_lib.escape(preview_raw)
+        initials = ""
+        raw_name = meta.get("name", phone)
+        parts = raw_name.split()
+        initials = (parts[0][0] + (parts[1][0] if len(parts) > 1 else "")).upper()
+        phone_id = phone.replace("+","").replace(" ","")
+        contacts_html += f"""<div class='ci' id='c{phone_id}' onclick='show("{phone}")'>
+  <div class='av'>{initials}</div>
+  <div class='ci-info'>
+    <div class='ci-name'>{name}</div>
+    <div class='ci-prev'>{preview}</div>
+  </div>
+  <div class='ci-time'>{last}</div>
+</div>"""
+
+    # Log rows
+    log_colors = {"SalesAgent":"#25d366","VisionAgent":"#2196F3","PaymentAgent":"#FF9800",
+                  "FulfillmentAgent":"#9C27B0","Orchestrator":"#607D8B","WA_SEND":"#00BCD4",
+                  "ZohoAPI":"#ff7043","PhotoAgent":"#ab47bc","Webhook":"#795548"}
     logs_html = ""
-    for entry in reversed(logs[-50:]):
-        color = {
-            "SalesAgent": "#4CAF50",
-            "VisionAgent": "#2196F3",
-            "PaymentAgent": "#FF9800", "FulfillmentAgent": "#9C27B0",
-            "Orchestrator": "#607D8B", "WA_SEND": "#00BCD4", "Webhook": "#795548"
-        }.get(entry["agent"], "#999")
-        logs_html += f"""<tr>
-          <td style='color:#888;font-size:12px'>{entry['timestamp'][11:19]}</td>
-          <td><span style='background:{color};color:white;padding:2px 8px;border-radius:10px;font-size:12px'>{entry['agent']}</span></td>
-          <td style='font-size:13px'>{entry['action']}</td>
-          <td style='font-size:12px;color:#555'>{entry['detail'][:80]}</td>
-        </tr>"""
+    for entry in reversed(logs[-80:]):
+        color = log_colors.get(entry["agent"], "#999")
+        logs_html += (f"<div class='lr'>"
+                      f"<span class='lt'>{entry['timestamp'][11:19]}</span>"
+                      f"<span class='lb' style='background:{color}'>{html_lib.escape(entry['agent'])}</span>"
+                      f"<span class='la'>{html_lib.escape(entry['action'])}</span>"
+                      f"<span class='ld'>{html_lib.escape(entry['detail'][:90])}</span>"
+                      f"</div>")
 
-    # Conversations and orders
-    conv_meta = state.get("conv_meta", {})
-    sumin_convs     = len(conv_meta)
+    conv_json = json.dumps(conversations, ensure_ascii=False)
+    meta_json = json.dumps(conv_meta,     ensure_ascii=False)
+    n_convs   = len(sorted_phones)
+    n_orders  = len(state.get("orders", []))
+    ts        = datetime.now().strftime("%H:%M:%S")
 
-    orders_html = ""
-    status_icons = {"quote_sent": "ð", "payment_received": "ð°", "shipped": "ð¦", "pending": "â³"}
-    for o in state.get("orders", []):
-        icon = status_icons.get(o.get("status", ""), "â")
-        orders_html += f"<tr><td>{o.get('name','')}</td><td>{o.get('client','')}</td><td>{icon} {o.get('status','')}</td><td>{o.get('payment_date','')[:10]}</td></tr>"
-
-    return Response(content=f"""<!DOCTYPE html>
+    return Response(media_type="text/html", content=f"""<!DOCTYPE html>
 <html><head><meta charset='utf-8'><title>SUMIN Bot</title>
-<meta http-equiv='refresh' content='15'>
 <style>
-body{{font-family:sans-serif;background:#1a1a2e;color:#eee;margin:0;padding:20px}}
-h1{{color:#4CAF50}}h2{{color:#aaa;font-size:16px}}
-.stats{{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap}}
-.stat{{background:#16213e;border-radius:8px;padding:14px 20px;flex:1;text-align:center;min-width:120px}}
-.stat .n{{font-size:28px;font-weight:bold;color:#4CAF50}}
-.stat .l{{font-size:12px;color:#888}}
-table{{width:100%;border-collapse:collapse;background:#16213e;border-radius:8px;overflow:hidden;margin-bottom:20px}}
-th{{background:#0f3460;padding:10px;text-align:left;font-size:13px}}
-td{{padding:8px 10px;border-bottom:1px solid #0a2040}}
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:-apple-system,Segoe UI,sans-serif;background:#111b21;color:#e9edef;height:100vh;display:flex;flex-direction:column;overflow:hidden}}
+#hdr{{background:#202c33;padding:10px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #2a3942;flex-shrink:0}}
+#hdr h1{{font-size:17px;color:#00a884;font-weight:700}}
+.hstats{{display:flex;gap:18px;font-size:13px;color:#8696a0}}
+#main{{display:flex;flex:1;overflow:hidden}}
+/* SIDEBAR */
+#sidebar{{width:360px;min-width:260px;background:#111b21;border-right:1px solid #2a3942;display:flex;flex-direction:column;overflow:hidden}}
+#sb-hdr{{background:#202c33;padding:12px 16px;font-size:12px;color:#8696a0;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #2a3942}}
+#contact-list{{flex:1;overflow-y:auto}}
+.ci{{display:flex;align-items:center;padding:11px 16px;cursor:pointer;border-bottom:1px solid #1f2c34;transition:background .12s}}
+.ci:hover,.ci.active{{background:#2a3942}}
+.av{{width:46px;height:46px;border-radius:50%;background:#00a884;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0;margin-right:12px}}
+.ci-info{{flex:1;min-width:0}}
+.ci-name{{font-size:15px;font-weight:500;color:#e9edef;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+.ci-prev{{font-size:13px;color:#8696a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}}
+.ci-time{{font-size:11px;color:#8696a0;flex-shrink:0;margin-left:8px}}
+/* CHAT PANEL */
+#chat{{flex:1;display:flex;flex-direction:column;background:#0b141a;overflow:hidden}}
+#chat-hdr{{background:#202c33;padding:11px 18px;display:flex;align-items:center;border-bottom:1px solid #2a3942;flex-shrink:0;min-height:62px}}
+#chat-hdr .av2{{width:40px;height:40px;border-radius:50%;background:#00a884;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;margin-right:12px;flex-shrink:0}}
+#ch-name{{font-size:15px;font-weight:600;color:#e9edef}}
+#ch-phone{{font-size:12px;color:#8696a0}}
+#msgs{{flex:1;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:3px}}
+.msg{{max-width:68%;padding:7px 11px 7px 11px;border-radius:8px;font-size:14px;line-height:1.5;word-wrap:break-word;white-space:pre-wrap}}
+.msg.u{{background:#005c4b;align-self:flex-end;border-radius:8px 8px 2px 8px;color:#e9edef}}
+.msg.b{{background:#202c33;align-self:flex-start;border-radius:8px 8px 8px 2px;color:#e9edef}}
+.msg .rl{{font-size:10px;margin-bottom:3px;opacity:.65}}
+.msg.u .rl{{text-align:right;color:#a8d5c2}}
+.msg.b .rl{{color:#8696a0}}
+#empty{{display:flex;align-items:center;justify-content:center;flex:1;flex-direction:column;gap:12px;color:#8696a0;font-size:14px}}
+/* LOG */
+#log-bar{{background:#202c33;padding:8px 16px;cursor:pointer;color:#8696a0;font-size:12px;text-align:center;border-top:1px solid #2a3942;flex-shrink:0}}
+#log-bar:hover{{color:#e9edef}}
+#log-panel{{background:#111b21;overflow:hidden;max-height:0;transition:max-height .3s;flex-shrink:0}}
+#log-panel.open{{max-height:180px;overflow-y:auto}}
+.lr{{display:flex;gap:8px;padding:4px 14px;border-bottom:1px solid #1a2530;font-size:12px;align-items:center}}
+.lt{{color:#8696a0;flex-shrink:0;width:56px}}
+.lb{{padding:1px 6px;border-radius:8px;font-size:11px;color:#fff;flex-shrink:0}}
+.la{{color:#e9edef;flex-shrink:0;min-width:90px}}
+.ld{{color:#8696a0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}}
+::-webkit-scrollbar{{width:5px}}::-webkit-scrollbar-thumb{{background:#374045;border-radius:3px}}
 </style></head>
 <body>
-<h1>â¡ SUMIN Bot Dashboard</h1>
-<p style='color:#888'>Auto-refresh 15s | {datetime.now().strftime('%H:%M:%S')}</p>
-<div class='stats'>
-  <div class='stat'><div class='n'>{sumin_convs}</div><div class='l'>Chats SUMIN</div></div>
-  <div class='stat'><div class='n'>{len(state.get("orders",[]))}</div><div class='l'>Ãrdenes</div></div>
+<div id='hdr'>
+  <h1>â¡ SUMIN Bot</h1>
+  <div class='hstats'>
+    <span>ð¬ {n_convs} chats</span>
+    <span>ð¦ {n_orders} Ã³rdenes</span>
+    <span style='opacity:.5'>{ts}</span>
+  </div>
 </div>
-<h2>ð¦ Ãrdenes SUMIN</h2>
-<table><tr><th>Cliente</th><th>NÃºmero</th><th>Status</th><th>Fecha pago</th></tr>
-{orders_html or "<tr><td colspan=4 style='color:#555'>Sin Ã³rdenes</td></tr>"}
-</table>
-<h2>ð Log de agentes (Ãºltimas 50 acciones)</h2>
-<table><tr><th>Hora</th><th>Agente</th><th>AcciÃ³n</th><th>Detalle</th></tr>
-{logs_html or "<tr><td colspan=4 style='color:#555'>Sin actividad</td></tr>"}
-</table>
-</body></html>""", media_type="text/html")
+<div id='main'>
+  <aside id='sidebar'>
+    <div id='sb-hdr'>Conversaciones â {n_convs}</div>
+    <div id='contact-list'>{"" if contacts_html else "<div style='padding:24px;color:#8696a0;font-size:14px'>Sin conversaciones aÃºn</div>"}{contacts_html}</div>
+  </aside>
+  <section id='chat'>
+    <div id='chat-hdr'>
+      <div id='ch-av' class='av2' style='display:none'></div>
+      <div><div id='ch-name' style='color:#8696a0;font-size:14px'>Selecciona una conversaciÃ³n â</div><div id='ch-phone'></div></div>
+    </div>
+    <div id='msgs'><div id='empty'><span style='font-size:48px'>ð¬</span><span>Selecciona un contacto para ver la conversaciÃ³n</span></div></div>
+  </section>
+</div>
+<div id='log-bar' onclick="document.getElementById('log-panel').classList.toggle('open')">ð Log de sistema (clic para expandir)</div>
+<div id='log-panel'>{logs_html or "<div style='padding:12px;color:#8696a0'>Sin actividad</div>"}</div>
+<script>
+const C={conversations_json};
+const M={meta_json};
+let cur=null;
+function ini(s){{let p=s.split(' ');return(p[0][0]+(p[1]?p[1][0]:'')).toUpperCase()}}
+function show(phone){{
+  cur=phone;
+  const msgs=C[phone]||[];
+  const meta=M[phone]||{{}};
+  const name=meta.name||phone;
+  document.getElementById('ch-av').style.display='flex';
+  document.getElementById('ch-av').textContent=ini(name);
+  document.getElementById('ch-name').textContent=name;
+  document.getElementById('ch-name').style.color='#e9edef';
+  document.getElementById('ch-phone').textContent=phone;
+  const box=document.getElementById('msgs');
+  box.innerHTML='';
+  for(const m of msgs){{
+    const d=document.createElement('div');
+    d.className='msg '+(m.role==='user'?'u':'b');
+    const rl=document.createElement('div');rl.className='rl';
+    rl.textContent=m.role==='user'?'Cliente':'SUMIN Bot';
+    d.appendChild(rl);
+    const t=document.createElement('div');t.textContent=m.content;
+    d.appendChild(t);box.appendChild(d);
+  }}
+  box.scrollTop=box.scrollHeight;
+  document.querySelectorAll('.ci').forEach(e=>e.classList.remove('active'));
+  const pid=phone.replace(/\\+/g,'').replace(/ /g,'');
+  document.getElementById('c'+pid)?.classList.add('active');
+}}
+// Auto-select first
+const phones=Object.keys(C);
+if(phones.length>0)setTimeout(()=>show(phones[0]),50);
+// Reload page every 30s preserving selection
+setTimeout(()=>{{const u=new URL(location.href);if(cur)u.searchParams.set('sel',cur);location.href=u;}},30000);
+const sel=new URLSearchParams(location.search).get('sel');
+if(sel&&C[sel])setTimeout(()=>show(sel),60);
+</script>
+</body></html>""".replace("{conversations_json}", conv_json).replace("{meta_json}", meta_json))
 
 @app.get("/zoho-auth")
 async def zoho_auth():
@@ -587,7 +872,7 @@ async def zoho_callback(request: Request):
     """Exchange authorization code for refresh token."""
     code = dict(request.query_params).get("code", "")
     if not code:
-        return Response("<html><body><h2>â No se recibiÃ³ cÃ³digo de autorizaciÃ³n.</h2></body></html>",
+        return Response("<html><body><h2>â No se recibih3 cÃ³digo de autorizaciÃ³n.</h2></body></html>",
                         media_type="text/html", status_code=400)
     try:
         r = httpx.post(
