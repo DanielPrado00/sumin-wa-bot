@@ -11,7 +11,7 @@ import anthropic
 
 app = FastAPI()
 
-# ── CONFIG ──────────────────────────────────────────────────────────────────
+# ─── CONFIG ──────────────────────────────────────────────────────────────────
 VERIFY_TOKEN      = os.environ["WA_VERIFY_TOKEN"]
 WA_TOKEN          = os.environ["WA_ACCESS_TOKEN"]
 PHONE_NUMBER_ID   = os.environ["WA_PHONE_NUMBER_ID"]
@@ -22,6 +22,7 @@ LOG_FILE   = "bot_log.json"
 # ─── BUSINESS NUMBERS ────────────────────────────────────────────────────────
 ALDO_NUMBER              = "50497096965"   # Ing. Aldo Villafranca - Proenco
 TAKICARDIA_CONFIRM_NUMBER = "50431447807"  # Takicardia owner – receives comprobantes
+EDY_NUMBER                = "50431723021"  # Edy – motorista de delivery
 
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
@@ -33,7 +34,7 @@ SKIP_NUMBERS = {
 }
 
 # ════════════════════════════════════════════════════════════════════════════════
-# ─── SUMIN — SYSTEM PROMPT ──────────────────────────────────────────────────
+# ─── SUMIN — SYSTEM PROMPT ───────────────────────────────────────────────────
 # ════════════════════════════════════════════════════════════════════════════════
 SUMIN_SYSTEM = """Eres un agente de ventas de Suministros Internacionales HN (SUMIN).
 Respondes en español, con un tono natural y cálido — como una persona real, NO como un robot.
@@ -125,7 +126,7 @@ REGLAS CLAVE
 - Si el cliente pregunta algo que no vendemos, díselo directamente sin rodeos.
 """
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════════════════
 # ─── PROENCO — SYSTEM PROMPT ─────────────────────────────────────────────────
 # ════════════════════════════════════════════════════════════════════════════════
 PROENCO_SYSTEM = """Eres el asistente virtual de Proenco, empresa del Ing. Aldo Villafranca (Ingeniero Civil especialista en techos) en Honduras.
@@ -202,14 +203,15 @@ ESTILO DE RESPUESTA
 MENÚ COMPLETO
 ═══════════════════════════════════════
 
-🥩 TACOS x LIBRA (incluye 20 tortillas, cebolla, cilantro, limones, salsa verde, encurtido y pico de gallo):
-- Pollo: L340
-- Chorizo Picante: L350
-- Cerdo al Pastor: L350 ⚠️ (contiene piña)
-- Res: L360
-- Mixto: L360
+🥩 TACOS x LIBRA (orden por libra de carne — incluye 20 tortillas, cebolla, cilantro, limones, salsa verde, encurtido y pico de gallo):
+- Pollo: L340 por libra
+- Chorizo Picante: L350 por libra
+- Cerdo al Pastor: L350 por libra ⚠️ (contiene piña)
+- Res: L360 por libra
+- Mixto: L360 por libra
+Ideal para grupos o familias. Cada libra rinde bastante.
 
-🫓 QUESADILLAS / GRINGAS (orden de 3):
+🫓 QUESADILLAS / GRINGAS (orden de 3 piezas):
 - Pollo: L190
 - Chorizo: L190
 - Res: L210
@@ -217,7 +219,7 @@ MENÚ COMPLETO
 - Mixtas: L230
 - Quesabirrias: L230
 
-⭐ ESPECIALIDAD (4 tacos, doble tortilla — excepto Birria):
+⭐ ESPECIALIDAD (plato de 4 tacos, doble tortilla — excepto Birria):
 - Pollo: L180
 - Cerdo al Pastor: L200 ⚠️ (contiene piña)
 - Chorizo Picante: L190
@@ -228,8 +230,8 @@ MENÚ COMPLETO
 - Mixtos: L220
 
 🍟 ANTOJOS:
-- Nacho Grande: L240
-- Nacho Mediano: L170
+- Nacho Grande: L240 (incluye jalapeños y cebolla)
+- Nacho Mediano: L170 (incluye jalapeños y cebolla)
 - Esquites: L70
 - Birria Noodles: L160
 - Birria Burger: L200
@@ -245,21 +247,50 @@ MENÚ COMPLETO
 - Michelada Mix: L50
 
 ═══════════════════════════════════════
+CÓMO INTERPRETAR LAS CANTIDADES DE TACOS
+═══════════════════════════════════════
+IMPORTANTE: Hay dos categorías distintas de tacos — debes aclarar cuál quiere el cliente si no es obvio.
+
+📦 TACOS x LIBRA: Se pide por LIBRA de carne (no por taco individual).
+  "1 de pollo" = 1 LIBRA de pollo = L340 (viene con 20 tortillas + complementos)
+  "2 de pastor y 2 de res" = 2 libras de pastor + 2 libras de res
+  → Esta categoría es para grupos o cuando quieren bastante comida.
+
+⭐ ESPECIALIDAD: Plato de exactamente 4 tacos por orden.
+  "1 especialidad de pollo" = 1 plato de 4 tacos de pollo = L180
+  "2 de pastor y 2 de pollo" = puede ser 1 Especialidad Mixtos (L220) o 2 especialidades separadas
+  → Esta es la opción individual/personal.
+
+REGLAS DE INTERPRETACIÓN:
+- Si el cliente dice solo "quiero tacos de X" sin especificar → pregunta: "¿Lo querés como Especialidad (plato de 4 tacos) o Tacos x Libra (para grupo, viene con 20 tortillas y todos los complementos)?"
+- Si menciona "libras" o "lbs" → Tacos x Libra.
+- Si pide "2 de pastor y 2 de pollo" → probablemente quiere Especialidad Mixtos (L220) o 2 especialidades. Confirma.
+- Si pide varios sabores en poca cantidad → sugiere Especialidad Mixtos.
+- Si pide la misma cantidad de un solo sabor (ej: "3 de pollo") → puede ser 3 libras (Tacos x LB) o 3 especialidades de pollo. Confirma.
+
+═══════════════════════════════════════
+PERSONALIZACIÓN DE PEDIDOS
+═══════════════════════════════════════
+- Si el cliente pide ingredientes por aparte (sin cebolla, con extra piña, sin cilantro, etc.) → anótalo en la comanda tal como lo pide.
+- Siempre incluirlo en el resumen final del pedido.
+- Ejemplo comanda: "1 Especialidad Pastor (sin piña) + 1 Nacho Grande (sin jalapeño)"
+
+═══════════════════════════════════════
 OPCIONES DE ENTREGA
 ═══════════════════════════════════════
 1. Pedidos Ya — el cliente hace el pedido por la app de Pedidos Ya
 2. Pickup en local — pasa a recoger en Jardines del Valle (Blvd frente al Superzito, detrás de Galerías del Valle)
-3. Delivery (si aplica según la zona del cliente)
+3. Delivery — nuestro motorista lleva el pedido (+L80 de costo de envío). En ~15 minutos llega el motorista una vez confirmado el pago.
 
 ═══════════════════════════════════════
 FLUJO DE PEDIDO
 ═══════════════════════════════════════
 1. Saluda y muestra el menú si el cliente pide verlo.
-2. Toma el pedido completo (productos, cantidades).
+2. Toma el pedido completo (productos, cantidades, personalizaciones).
 3. Pregunta cómo quiere recibirlo: ¿Pedidos Ya, pickup o delivery?
-   - Si es delivery: pedir dirección.
+   - Si es delivery: pedir dirección completa.
    - Si es pickup: confirmar que pase al local en Jardines del Valle.
-4. Confirmar el pedido con resumen y total.
+4. Confirmar el pedido con resumen y total (incluyendo personalizaciones). Si es delivery, sumar L80 al total por costo de envío.
 5. Preguntar forma de pago:
    "Para confirmar tu pedido, ¿cómo prefieres pagar?
    💳 *Tarjeta* — te enviamos un link de pago
@@ -267,8 +298,8 @@ FLUJO DE PEDIDO
 6. Según respuesta:
    - Tarjeta: "Perfecto, en un momento te enviamos el link de pago 🔗"
    - Transferencia: "Aquí los datos para transferencia:
-     Banco Atlántida — Cuenta: [CUENTA_TAKICARDIA]
-     A nombre de: Takicardia Taqueria
+     BAC — Cuenta: 749058971
+     A nombre de: Inversiones Casla
      Monto exacto: L[TOTAL]
      Al hacer la transferencia, envíanos el comprobante aquí y procesamos tu pedido de inmediato ✅"
 
@@ -277,7 +308,8 @@ IMPORTANTE: Si el cliente quiere pagar con Tarjeta, solo confirma que le enviar�
 ═══════════════════════════════════════
 CUANDO EL CLIENTE MANDA COMPROBANTE
 ═══════════════════════════════════════
-Responde: "¡Listo [nombre]! Recibimos tu comprobante, tu pedido está siendo preparado 🌮🔥"
+Responde: "¡Listo [nombre]! Recibimos tu comprobante, tu pedido está siendo preparado 🌮🔥 En aproximadamente 15 minutos pasa el motorista."
+(Solo di esto si es delivery. Si es pickup: "¡Listo! Recibimos tu comprobante, tu pedido está siendo preparado 🌮🔥 En breve te avisamos cuando esté listo para recoger.")
 (El sistema enviará el comprobante + detalles del pedido al equipo de Takicardia automáticamente.)
 
 ═══════════════════════════════════════
@@ -287,6 +319,7 @@ REGLAS CLAVE
 - Si el cliente pregunta por algo que no está en el menú: "Por el momento no tenemos ese plato, pero tenemos [sugerencia similar]."
 - Si menciona alergia a la piña: advertirle que el Pastor contiene piña.
 - No hagas más de una pregunta a la vez.
+- Anota SIEMPRE las personalizaciones (sin cebolla, extra piña, etc.) en el resumen del pedido.
 - Sé eficiente — el cliente quiere su taco rápido 🌮
 """
 
@@ -600,49 +633,89 @@ def proenco_agent(from_number: str, from_name: str, text: str, state: dict):
 # ─── TAKICARDIA AGENTS ───────────────────────────────────────────────────────
 # ════════════════════════════════════════════════════════════════════════════════
 
-def extract_taki_order_summary(history: list) -> str:
-    """Use Haiku to extract a brief order summary from conversation history."""
+def extract_taki_order_summary(history: list) -> dict:
+    """Use Haiku to extract order summary and delivery info from conversation history."""
     if len(history) < 4:
-        return "Pedido en progreso"
+        return {"summary": "Pedido en progreso", "delivery": False, "address": ""}
     conv_text = "\n".join(
         f"{'Cliente' if m['role']=='user' else 'Bot'}: {m['content']}"
         for m in history[-12:]
     )
     msg = claude.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=200,
-        messages=[{"role": "user", "content": f"""De esta conversación de WhatsApp de una taquería, extrae el resumen del pedido del cliente en 2-3 líneas.
-Incluye: qué pidió, cantidad, modo de entrega (pickup/delivery/Pedidos Ya), y total si se mencionó.
-Si no hay pedido claro, responde: "Consulta general"
+        max_tokens=300,
+        messages=[{"role": "user", "content": f"""De esta conversación de WhatsApp de una taquería, extrae la información del pedido.
+Responde SOLO el siguiente JSON sin nada más:
+{{
+  "summary": "resumen del pedido en 2-3 líneas (qué pidió, cantidades, personalizaciones, total si se mencionó)",
+  "delivery": true o false (true si es delivery a domicilio, false si es pickup o Pedidos Ya),
+  "address": "dirección de entrega si es delivery, sino vacío"
+}}
+
+Si no hay pedido claro, pon summary: "Consulta general", delivery: false, address: ""
 
 Conversación:
 {conv_text}"""}]
     )
-    return msg.content[0].text.strip()
+    result = msg.content[0].text.strip()
+    try:
+        match = re.search(r'\{.*\}', result, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+    except:
+        pass
+    return {"summary": result, "delivery": False, "address": ""}
 
 def taki_comprobante_agent(from_number: str, from_name: str, media_id: str, image_bytes: bytes, state: dict):
-    """Takicardia: Handle payment comprobante — acknowledge client + forward to owner."""
+    """Takicardia: Handle payment comprobante — acknowledge client + forward to owner + notify Edy if delivery."""
     log_action("TakicardiaAgent", "comprobante_received", f"From {from_name} ({from_number})")
 
-    first_name = from_name.split()[0] if from_name else "amigo"
-    wa_send(from_number, f"¡Listo {first_name}! Recibimos tu comprobante, tu pedido está siendo preparado 🌮🔥")
-
-    # Get order summary from conversation history
+    # Get order info from conversation history
     history = state.get("conversations", {}).get(from_number, [])
-    order_summary = extract_taki_order_summary(history)
+    order_info = extract_taki_order_summary(history)
+    order_summary = order_info.get("summary", "Pedido en progreso")
+    is_delivery   = order_info.get("delivery", False)
+    # Use location saved from WhatsApp location message if available
+    saved_address = get_conv_meta(state, from_number).get("delivery_address", "")
+    address       = saved_address or order_info.get("address", "")
+    if address:
+        is_delivery = True
+
+    first_name = from_name.split()[0] if from_name else "amigo"
+
+    # Acknowledge client
+    if is_delivery:
+        wa_send(from_number, f"¡Listo {first_name}! Recibimos tu comprobante, tu pedido está siendo preparado 🌮🔥 En aproximadamente 15 minutos pasa el motorista.")
+    else:
+        wa_send(from_number, f"¡Listo {first_name}! Recibimos tu comprobante, tu pedido está siendo preparado 🌮🔥")
 
     # Forward comprobante image to Takicardia owner
     wa_forward_image(media_id, TAKICARDIA_CONFIRM_NUMBER)
 
     # Send order details as text to owner
+    delivery_line = f"🛵 *Entrega:* Delivery — {address}" if is_delivery else "🏠 *Entrega:* Pickup en local"
     owner_msg = (
         f"🌮 *Nuevo pedido confirmado — Takicardia*\n\n"
         f"👤 *Cliente:* {from_name}\n"
         f"📞 *Número:* +{from_number}\n"
-        f"📋 *Pedido:*\n{order_summary}\n\n"
+        f"📋 *Pedido:*\n{order_summary}\n"
+        f"{delivery_line}\n\n"
         f"💳 *Pago:* Comprobante de transferencia recibido ✅"
     )
     wa_send(TAKICARDIA_CONFIRM_NUMBER, owner_msg)
+
+    # If delivery — notify Edy (motorista) with client location
+    if is_delivery:
+        edy_msg = (
+            f"🛵 *Pedido para delivery — Takicardia*\n\n"
+            f"👤 *Cliente:* {from_name}\n"
+            f"📞 *Número:* +{from_number}\n"
+            f"📍 *Dirección:* {address or 'Ver con el cliente'}\n"
+            f"📋 *Pedido:* {order_summary}\n\n"
+            f"Por favor coordina la entrega. El cliente ya fue notificado que en ~15 minutos llega el motorista. 🙏"
+        )
+        wa_send(EDY_NUMBER, edy_msg)
+        log_action("TakicardiaAgent", "edy_notified", f"Delivery to {address} for {from_name}")
 
     # Save order record
     if 'taki_orders' not in state:
@@ -652,10 +725,26 @@ def taki_comprobante_agent(from_number: str, from_name: str, media_id: str, imag
         "name": from_name,
         "status": "payment_received",
         "summary": order_summary,
+        "delivery": is_delivery,
+        "address": address,
         "payment_date": datetime.now().isoformat()
     })
     save_state(state)
     log_action("TakicardiaAgent", "order_confirmed", f"{from_name}: {order_summary[:80]}")
+
+def notify_taki_kitchen(from_number: str, from_name: str, order_summary: str, is_delivery: bool, address: str):
+    """Send new order notification to Takicardia kitchen/owner."""
+    delivery_line = f"🛵 *Entrega:* Delivery — {address}" if is_delivery else "🏠 *Entrega:* Pickup en local"
+    msg = (
+        f"🌮 *Nuevo pedido — Takicardia*\n\n"
+        f"👤 *Cliente:* {from_name}\n"
+        f"📞 *Número:* +{from_number}\n"
+        f"📋 *Pedido:*\n{order_summary}\n"
+        f"{delivery_line}\n\n"
+        f"⏳ *Estado:* Pendiente de pago"
+    )
+    wa_send(TAKICARDIA_CONFIRM_NUMBER, msg)
+    log_action("TakicardiaAgent", "kitchen_notified", f"{from_name}: {order_summary[:60]}")
 
 def takicardia_agent(from_number: str, from_name: str, text: str, state: dict):
     """Takicardia: Handle food ordering conversation."""
@@ -672,6 +761,21 @@ def takicardia_agent(from_number: str, from_name: str, text: str, state: dict):
 
     wa_send(from_number, response)
     log_action("TakicardiaAgent", "sent_response", response[:100])
+
+    # Detect order confirmation moment — when bot gives payment instructions
+    is_order_confirmation = any(phrase in response.lower() for phrase in [
+        "bac", "749058971", "link de pago", "transferencia", "confirmar tu pedido"
+    ])
+    meta = get_conv_meta(state, from_number)
+    if is_order_confirmation and not meta.get('kitchen_notified'):
+        order_info = extract_taki_order_summary(history)
+        order_summary = order_info.get("summary", "Pedido en progreso")
+        saved_address = meta.get("delivery_address", "")
+        is_delivery = bool(saved_address) or order_info.get("delivery", False)
+        address = saved_address or order_info.get("address", "")
+        notify_taki_kitchen(from_number, from_name, order_summary, is_delivery, address)
+        meta['kitchen_notified'] = True
+
     save_state(state)
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -680,7 +784,7 @@ def takicardia_agent(from_number: str, from_name: str, text: str, state: dict):
 
 def orchestrate(message_data: dict):
     """Main dispatcher — routes to SUMIN, Proenco, or Takicardia based on conversation context."""
-    time.sleep(60)
+    time.sleep(10)
 
     state     = load_state()
     from_number = message_data.get("from", "")
@@ -713,6 +817,28 @@ def orchestrate(message_data: dict):
             proenco_agent(from_number, from_name, "[El cliente envió una foto de su techo actual]", state)
         else:
             vision_agent(from_number, from_name, media_id, mime_type, state)
+        return
+
+    # ── LOCATION HANDLING ────────────────────────────────────────────────────
+    if msg_type == "location":
+        loc       = message_data.get("location", {})
+        lat       = loc.get("latitude", "")
+        lng       = loc.get("longitude", "")
+        loc_name  = loc.get("name", "")
+        loc_addr  = loc.get("address", "")
+        maps_link = f"https://maps.google.com/?q={lat},{lng}"
+        # Build readable address text
+        parts = [p for p in [loc_name, loc_addr] if p]
+        address_text = (", ".join(parts) + "\n" if parts else "") + maps_link
+        # Save to conv_meta so comprobante agent can use it
+        meta['delivery_address'] = address_text
+        save_state(state)
+        log_action("Orchestrator", "location_received", f"{from_name}: {address_text[:80]}")
+        if business == 'takicardia':
+            takicardia_agent(from_number, from_name,
+                             f"[El cliente compartió su ubicación para el delivery: {address_text}]", state)
+        else:
+            wa_send(from_number, "Gracias, recibimos tu ubicación 📍")
         return
 
     # ── TEXT HANDLING ─────────────────────────────────────────────────────────
@@ -768,8 +894,40 @@ def orchestrate(message_data: dict):
             takicardia_agent(from_number, from_name, text, state)
 
     elif msg_type == "document":
-        filename = message_data.get("document", {}).get("filename", "")
-        if business == 'proenco':
+        doc      = message_data.get("document", {})
+        filename = doc.get("filename", "")
+        mime     = doc.get("mime_type", "")
+        media_id = doc.get("id", "")
+        # PDF comprobante for Takicardia
+        if business == 'takicardia' and "pdf" in mime.lower():
+            log_action("TakicardiaAgent", "pdf_comprobante", f"PDF from {from_name}")
+            first_name = from_name.split()[0] if from_name else "amigo"
+            saved_address = get_conv_meta(state, from_number).get("delivery_address", "")
+            is_delivery = bool(saved_address)
+            if is_delivery:
+                wa_send(from_number, f"¡Listo {first_name}! Recibimos tu comprobante, tu pedido está siendo preparado 🌮🔥 En aproximadamente 15 minutos pasa el motorista.")
+            else:
+                wa_send(from_number, f"¡Listo {first_name}! Recibimos tu comprobante, tu pedido está siendo preparado 🌮🔥")
+            # Forward PDF to owner
+            wa_forward_image(media_id, TAKICARDIA_CONFIRM_NUMBER)
+            history = state.get("conversations", {}).get(from_number, [])
+            order_info = extract_taki_order_summary(history)
+            order_summary = order_info.get("summary", "Pedido en progreso")
+            address = saved_address or order_info.get("address", "")
+            delivery_line = f"🛵 Delivery — {address}" if (is_delivery or order_info.get("delivery")) else "🏠 Pickup"
+            wa_send(TAKICARDIA_CONFIRM_NUMBER,
+                    f"🌮 *Pedido confirmado (PDF)*\n👤 {from_name} +{from_number}\n📋 {order_summary}\n{delivery_line}\n💳 Comprobante recibido ✅")
+            if is_delivery and address:
+                wa_send(EDY_NUMBER,
+                        f"🛵 *Delivery — Takicardia*\n👤 {from_name} +{from_number}\n📍 {address}\n📋 {order_summary}\n~15 min al cliente 🙏")
+            if 'taki_orders' not in state:
+                state['taki_orders'] = []
+            state['taki_orders'].append({"client": from_number, "name": from_name,
+                                         "status": "payment_received", "summary": order_summary,
+                                         "delivery": is_delivery, "address": address,
+                                         "payment_date": datetime.now().isoformat()})
+            save_state(state)
+        elif business == 'proenco':
             proenco_agent(from_number, from_name, f"[Documento adjunto: {filename}]", state)
         elif business == 'takicardia':
             takicardia_agent(from_number, from_name, f"[Documento adjunto: {filename}]", state)
