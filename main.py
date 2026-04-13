@@ -77,10 +77,12 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
 
    REGLA DE PRECIOS PARA ELECTRODOS (HIERROS DULCES, HIERRO COLADO, HARDFACING):
    - Siempre cotizar en L/lb y total de caja (ej: "L51.00/lb | caja 10 lbs: L510.00")
-   - NUNCA cotizar por unidad (varilla individual) — si el cliente pide precio por unidad:
-     responder "Para precio por unidad, comuníquese a nuestra oficina al 2557-0640."
-   - EXCEPCIÓN: Electrodos de ACERO INOXIDABLE y TUNGSTENO para TIG sí se cotizan por unidad
-     (los precios en lista ya son por unidad para esas categorías).
+   - La cantidad mínima de venta es 1/4 de libra (un cuarto de libra).
+   - NUNCA cotizar por unidad/varilla individual — si el cliente pide precio por unidad o
+     pregunta cuántas varillas trae una caja, responder:
+     "Para precio o cantidad por unidad, comuníquese a nuestra oficina al 2557-0640."
+   - EXCEPCIÓN: Solo el TUNGSTENO para TIG se cotiza por unidad (el precio en lista ya es por unidad).
+   - Electrodos de ACERO INOXIDABLE también se venden por lb o 1/4 de libra, misma regla.
 
    PRECIOS DE REFERENCIA — HIERROS DULCES (marca A.A., ISV incluido):
    - E6010: caja 10 lbs = L517.50 | caja 50 lbs = L2,587.50   (3/32", 1/8", 5/32")
@@ -89,16 +91,16 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    - E7018: caja 10 lbs = L414.00 | caja 50 lbs = L2,070.00   (3/32", 1/8", 5/32")
    - E7024: caja 10 lbs = L460.00 | caja 50 lbs = L2,300.00   (1/8")
 
-   ELECTRODOS ACERO INOXIDABLE (precio por unidad, con ISV):
-   - E308-16 de 1/8: L138.00/und | de 3/32: L161.00/und | de 5/32: L247.25/und
-   - E308L-16 de 1/8: L241.50/und | de 3/32: L241.50/und
-   - E309-16 de 1/8: L356.50/und | de 3/32: L356.50/und | de 5/32: L356.50/und
-   - E309L-16 de 1/8: L356.50/und
-   - E316-16 de 1/8: L356.50/und
-   - E316L-16 de 1/8: L356.50/und
-   - E310-16 de 1/8: L586.50/und | de 3/32: L546.25/und
-   - E312-16 de 1/8: L327.75/und
-   - Tensile Weld de 1/8: L333.50/und | de 5/32: L356.50/und
+   ELECTRODOS ACERO INOXIDABLE (precio por libra, con ISV — mínimo 1/4 lb):
+   - E308-16 de 1/8: L138.00/lb | de 3/32: L161.00/lb | de 5/32: L247.25/lb
+   - E308L-16 de 1/8: L241.50/lb | de 3/32: L241.50/lb
+   - E309-16 de 1/8: L356.50/lb | de 3/32: L356.50/lb | de 5/32: L356.50/lb
+   - E309L-16 de 1/8: L356.50/lb
+   - E316-16 de 1/8: L356.50/lb
+   - E316L-16 de 1/8: L356.50/lb
+   - E310-16 de 1/8: L586.50/lb | de 3/32: L546.25/lb
+   - E312-16 de 1/8: L327.75/lb
+   - Tensile Weld de 1/8: L333.50/lb | de 5/32: L356.50/lb
 
    ELECTRODOS HIERRO COLADO (precio por libra y por caja de 10 lbs, con ISV):
    - NI-55 de 1/8: L52.00/lb | caja 10 lbs: L520.00
