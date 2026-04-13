@@ -394,6 +394,7 @@ def get_conv_meta(state: dict, conv_key: str) -> dict:
 
 # ─── ZOHO BOOKS INTEGRATION ──────────────────────────────────────────────────
 _zoho_token_cache: dict = {"token": None, "expires": 0.0}
+_zoho_catalog_cache: dict = {"items": [], "expires": 0.0}  # Full product catalog cache
 
 def get_zoho_access_token() -> str | None:
     """Return a valid Zoho access token, refreshing if expired."""
@@ -458,6 +459,84 @@ def zoho_check_item(query: str) -> dict | None:
         log_action("ZohoAPI", "search_error", str(e))
         return None
 
+def fetch_zoho_catalog() -> list:
+    """Fetch and cache all active Zoho items (refreshes every hour)."""
+    global _zoho_catalog_cache
+    now = time.time()
+    if _zoho_catalog_cache["items"] and now < _zoho_catalog_cache["expires"]:
+        return _zoho_catalog_cache["items"]
+    token = get_zoho_access_token()
+    if not token or not ZOHO_ORG_ID:
+        return _zoho_catalog_cache["items"]
+    all_items = []
+    page = 1
+    try:
+        while True:
+            r = httpx.get(
+                "https://www.zohoapis.com/books/v3/items",
+                params={
+                    "organization_id": ZOHO_ORG_ID,
+                    "filter_by": "Status.Active",
+                    "page": page,
+                    "per_page": 200,
+                },
+                headers={"Authorization": f"Zoho-oauthtoken {token}"},
+                timeout=15,
+            )
+            data = r.json()
+            items = data.get("items", [])
+            if not items:
+                break
+            all_items.extend(items)
+            if not data.get("page_context", {}).get("has_more_page", False):
+                break
+            page += 1
+        _zoho_catalog_cache = {"items": all_items, "expires": now + 3600}
+        log_action("ZohoAPI", "catalog_fetched", f"{len(all_items)} items, {page} pages")
+        return all_items
+    except Exception as e:
+        log_action("ZohoAPI", "catalog_error", str(e))
+        return _zoho_catalog_cache["items"]  # Return stale cache on error
+
+def match_product_to_catalog(client_query: str, catalog: list) -> dict | None:
+    """Use Claude Haiku to find the best matching Zoho product for a client's natural-language query."""
+    if not catalog:
+        return None
+    # Build compact catalog text for Claude
+    catalog_lines = []
+    for item in catalog:
+        name = item.get("item_name", "")
+        sku  = item.get("sku", "")
+        rate = item.get("rate", 0)
+        if name:
+            catalog_lines.append(f"SKU:{sku} | {name} | L.{rate}")
+    catalog_text = "\n".join(catalog_lines[:350])
+    try:
+        response = claude.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=60,
+            messages=[{"role": "user", "content":
+                f"El cliente pregunta por: \"{client_query}\"\n\n"
+                f"Catálogo de productos disponibles:\n{catalog_text}\n\n"
+                f"¿Cuál es el SKU del producto que mejor coincide con lo que pide el cliente?\n"
+                f"Responde SOLO el SKU exacto del producto, sin explicaciones. "
+                f"Si no hay match claro, responde NINGUNO."}]
+        ).content[0].text.strip()
+        if not response or response.upper() == "NINGUNO":
+            return None
+        # Find item by SKU (exact then partial)
+        sku_clean = response.strip()
+        for item in catalog:
+            if item.get("sku", "").strip() == sku_clean:
+                return item
+        for item in catalog:
+            if sku_clean in item.get("sku", "") or item.get("sku", "") in sku_clean:
+                return item
+        return None
+    except Exception as e:
+        log_action("ZohoAPI", "match_error", str(e))
+        return None
+
 def zoho_inventory_context(text: str) -> str:
     """If the message looks like a product inquiry, query Zoho and return context string."""
     inquiry_words = [
@@ -472,36 +551,29 @@ def zoho_inventory_context(text: str) -> str:
     ]
     if not any(w in text.lower() for w in inquiry_words):
         return ""
-    # Extract product name with haiku
     try:
-        extraction = claude.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=40,
-            messages=[{"role": "user", "content":
-                f"Del siguiente mensaje extrae SOLO el nombre o código del producto que pregunta el cliente. "
-                f"Responde ÚNICAMENTE el nombre/código del producto, sin explicaciones. "
-                f"Si no hay producto claro, responde 'NINGUNO'.\n\nMensaje: {text}"}]
-        ).content[0].text.strip()
-        if not extraction or extraction.upper() == "NINGUNO" or len(extraction) > 60:
-            return ""
-        result = zoho_check_item(extraction)
-        if result is None:
+        # 1. Get full Zoho catalog (cached, refreshes every hour)
+        catalog = fetch_zoho_catalog()
+        if not catalog:
             return ""   # Zoho unreachable — don't alter response
-        if result["found"]:
-            names_str = ", ".join(result["names"])
-            rate      = result.get("rate", 0.0)
-            unit      = result.get("unit", "")
+        # 2. Use AI to match client's natural-language query to exact Zoho product
+        matched = match_product_to_catalog(text, catalog)
+        if matched:
+            item_name = matched.get("item_name", "")
+            sku       = matched.get("sku", "")
+            rate      = matched.get("rate", 0.0)
+            unit      = matched.get("unit", "")
             price_ctx = ""
             if rate and rate > 0:
                 rate_with_isv = round(rate * 1.15, 2)
-                price_ctx = (f" Precio base Zoho: L{rate}/{unit} (+ ISV 15% = L{rate_with_isv}/{unit}). "
-                             f"Usa este precio como referencia REAL al responder.")
-            return (f"\n\n[INVENTARIO ZOHO — DATO REAL]: El producto '{extraction}' SÍ existe en nuestro "
-                    f"catálogo activo. Artículos: {names_str}.{price_ctx} "
+                price_ctx = (f" Precio base Zoho: L{rate}/{unit} + ISV 15% = *L{rate_with_isv}/{unit}*. "
+                             f"Da este precio directamente al cliente (ya incluye ISV).")
+            return (f"\n\n[INVENTARIO ZOHO — DATO REAL]: Producto encontrado: '{item_name}' "
+                    f"(SKU: {sku}).{price_ctx} "
                     f"Confirma disponibilidad y da precio con ISV incluido.")
         else:
-            return (f"\n\n[INVENTARIO ZOHO — DATO REAL]: El producto '{extraction}' no se encontró "
-                    f"en Zoho Books con ese término de búsqueda. IMPORTANTE: esto NO significa que "
+            return (f"\n\n[INVENTARIO ZOHO — DATO REAL]: No se encontró un producto claro en el "
+                    f"catálogo de Zoho para la consulta del cliente. IMPORTANTE: esto NO significa que "
                     f"no lo tengamos — puede estar catalogado diferente o con otro nombre. "
                     f"Usa tu conocimiento del catálogo (system prompt) para responder. "
                     f"Solo di que no lo manejamos si el system prompt tampoco lo menciona.")
@@ -1241,3 +1313,4 @@ async def privacy():
 <p>Recopilamos el contenido de mensajes y número de teléfono únicamente para atender su solicitud comercial. No compartimos su información con terceros.</p>
 <p>Contacto: <a href="mailto:danielprado@suminhn.com">danielprado@suminhn.com</a></p>
 </body></html>""", media_type="text/html")
+
