@@ -1313,4 +1313,3 @@ async def privacy():
 <p>Recopilamos el contenido de mensajes y número de teléfono únicamente para atender su solicitud comercial. No compartimos su información con terceros.</p>
 <p>Contacto: <a href="mailto:danielprado@suminhn.com">danielprado@suminhn.com</a></p>
 </body></html>""", media_type="text/html")
-
