@@ -183,7 +183,12 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    MARCAS PRINCIPALES: Safecut y Victor (estas son las que más nos importan promover).
    También manejamos: Metal Power.
 
-   Kits disponibles:
+   REGULADORES SAFECUT (precios con ISV incluido):
+   - Regulador Oxígeno Modelo 450: L3,220.00
+   - Regulador Acetileno Modelo 450: L3,220.00
+   Ambos incluyen: guarda de metal, arrestallama incorporado, válvula de alivio.
+   1 año de garantía. Certificación UL de fábrica. Certificados AWS.
+   Da estos precios directamente.
    - Equipo Journeyman II Victor (profesional, servicio pesado) — MARCA ESTRELLA
    - Safecut (equipo completo disponible) — MARCA ESTRELLA
    - Metal Power Super V-450 Deluxe (heavy duty, con maletín)
@@ -197,7 +202,13 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    - Safecut: consultar tienda para detalles de garantía.
 
 7. ANTORCHAS (4 tipos que manejamos):
-   a) ANTORCHA DE OXICORTE: marcas Victor y Safecut. Si el cliente envía imagen, podemos ayudar mejor.
+   a) ANTORCHA DE OXICORTE SafeCut — Antorcha Completa CA460 + Maneral WH450FC:
+      - Precio: L6,440.00 (ISV incluido)
+      - 1 año de garantía en reguladores, antorcha y maneral
+      - Disponibilidad de repuestos
+      - UL Listed | Certificada AWS
+      - Para uso pesado e industrial
+      Si el cliente manda imagen de lo que tiene, podemos ayudar a identificar si es compatible.
    b) ANTORCHA PARA CORTE PLASMA: consultar modelo y amperaje.
    c) ANTORCHA PARA TIG (argón): consultar amperaje y conector.
    d) ANTORCHA PARA MIG: tenemos para máquinas Miller, Lincoln y Euro (conector europeo).
@@ -259,6 +270,24 @@ PRODUCT_IMAGES: dict[str, list[str]] = {
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/HeatProtection18_Lateral.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/HeatProtection18_Palma.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/Weldas14_Negro.jpg",
+    ],
+    "chaqueta": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/chaqueta/Chaqueta_AA.jpg",
+    ],
+    "delantal": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/delantal/Delantal_AA_Frontal.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/delantal/Delantal_AA_Lateral.jpg",
+    ],
+    "reguladores": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Reguladores_SafeCut450.jpg",
+    ],
+    "antorchas": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Antorcha_SafeCut_CA460_WH450FC.jpg",
+    ],
+    "equipo_oxicorte": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/SafeCut450_Completo1.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/SafeCut450_Completo2.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/SafeCut450_Interior.jpg",
     ],
 }
 
