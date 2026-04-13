@@ -258,6 +258,7 @@ PRODUCT_IMAGES: dict[str, list[str]] = {
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/HeatProtection14_Palma.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/HeatProtection18_Lateral.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/HeatProtection18_Palma.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/Weldas14_Negro.jpg",
     ],
 }
 
@@ -333,7 +334,7 @@ def send_product_photos(to: str, product_key: str) -> bool:
     }
     caption = caption_map.get(product_key, "SUMIN — Suministros Internacionales HN")
     sent = 0
-    for url in urls[:3]:  # Max 3 photos per product
+    for url in urls[:5]:  # Max 5 photos per product
         result = wa_send_image_url(to, url, caption if sent == 0 else "")
         if result.get("messages"):
             sent += 1
