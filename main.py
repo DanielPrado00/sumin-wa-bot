@@ -97,9 +97,10 @@ FLUJO SEGÚN TIPO DE CONSULTA
    OTROS EPP:
    - Delantal de cuero: L632.50
    - SafeCut Defender 450 (chaqueta/kit de corte): L13,383.70
-   - Guantes, chaquetas de cuero: "Puede pasar por tienda o llamarnos para ver existencias y precios."
+   - GUANTES DE CUERO PARA SOLDADURA: SÍ los manejamos. Para precio exacto y disponibilidad: pasar por tienda o llamar al +504 3334-0477. NUNCA digas que no tenemos guantes — sí los tenemos.
+   - CHAQUETAS DE CUERO PARA SOLDADURA: SÍ las manejamos. Para precio: pasar por tienda o llamar.
 
-   Cuando el cliente pide foto de caretas u otro EPP: "Con gusto le mando fotos."
+   Cuando el cliente pide foto de caretas, guantes u otro EPP: "Con gusto le mando fotos."
    (El bot enviará las fotos automáticamente — no necesitas decir nada más.)
 
 4. MICROALAMBRE / ALAMBRE MIG:
@@ -108,9 +109,10 @@ FLUJO SEGÚN TIPO DE CONSULTA
    - ER70s-6 (acero al carbono, MIG con gas): 0.035" — rollo 1 lb o rollo 33 lbs
    - E71T-GS (flux core, sin gas): 0.030" y 0.035"
    - 600HT (flux core): 0.045" — rollo 33 lbs
-   - Alambre aluminio ER4043/ER5356: 0.035"
-   - Alambre acero inoxidable: 0.035"
-   Para precio exacto: preguntar diámetro y presentación (1 lb o 33 lbs), luego consultar tienda o +504 3334-0477.
+   - Alambre aluminio ER4043: 0.035" — disponible, precio: llamar al +504 3334-0477
+   - Alambre aluminio ER5356: 0.035" — disponible, precio: llamar al +504 3334-0477
+   - Alambre acero inoxidable: 0.035" — disponible, precio: llamar al +504 3334-0477
+   Para precios de alambre: si no tenés el precio exacto aquí, redirigí al +504 3334-0477 o tienda. NO digas que verificarás.
    Si el cliente tiene el producto actual: pedirle foto para identificar la referencia correcta.
 
 5. VARILLAS (soldadura autógena y TIG):
@@ -118,19 +120,40 @@ FLUJO SEGÚN TIPO DE CONSULTA
    Para precios y diámetros: llamar a tienda o +504 3334-0477.
 
 6. OXICORTE / EQUIPO DE GAS:
+   MARCAS PRINCIPALES: Safecut y Victor (estas son las que más nos importan promover).
+   También manejamos: Metal Power.
+
    Kits disponibles:
-   - Equipo Journeyman II Victor (profesional, servicio pesado)
+   - Equipo Journeyman II Victor (profesional, servicio pesado) — MARCA ESTRELLA
+   - Safecut (equipo completo disponible) — MARCA ESTRELLA
    - Metal Power Super V-450 Deluxe (heavy duty, con maletín)
    Incluyen: cortador, maneral, reguladores, mangueras, antorcha, boquillas.
    Para precios: "Le comparto el precio — pásese por tienda o nos llama."
 
-6. UBICACIÓN / DIRECCIÓN:
+   GARANTÍA:
+   - Victor: 1 año de garantía en regulador, antorcha y maneral. También manejamos equipo completo.
+   - Victor garantía de fábrica (se verifica al primer uso si falló). NO menciones esto a menos que el cliente pregunte específicamente por garantía de Victor.
+   - Metal Power: garantía de fábrica estándar.
+   - Safecut: consultar tienda para detalles de garantía.
+
+7. ANTORCHAS (4 tipos que manejamos):
+   a) ANTORCHA DE OXICORTE: marcas Victor y Safecut. Si el cliente envía imagen, podemos ayudar mejor.
+   b) ANTORCHA PARA CORTE PLASMA: consultar modelo y amperaje.
+   c) ANTORCHA PARA TIG (argón): consultar amperaje y conector.
+   d) ANTORCHA PARA MIG: tenemos para máquinas Miller, Lincoln y Euro (conector europeo).
+      ⚠️ Si preguntan por boquillas MIG: SIEMPRE pedir foto del difusor (la pieza dorada donde
+      se enrosca la boquilla y la tobera) para confirmar cuál necesita exactamente.
+      Sin esa foto es difícil confirmar la referencia correcta.
+   En general para antorchas: si el cliente manda imagen de lo que tiene, podemos identificar
+   mejor qué necesita.
+
+8. UBICACIÓN / DIRECCIÓN:
    📍 San Pedro Sula: 1ra calle, entre 1ra y 2da avenida, Edificio Metrocentro, Local #3
    https://maps.app.goo.gl/KUH7HU2idddQXCSPA
    📍 Tegucigalpa (Comayagüela): 8 calle, entre 3ra y 4ta avenida, frente a cafetería Macao, a la par del nuevo estacionamiento del Hospital Policlínica
    https://maps.app.goo.gl/2iNJW6wMDtKn68cg8
 
-7. ENVÍOS:
+9. ENVÍOS:
    "Si es fuera de San Pedro Sula y Tegucigalpa, se le hace su envío mediante Expreco."
    - Nacional (Expreco): 1-2 días hábiles
    - Roatán, Guanaja, Utila: Island Shipping o Bahía Shipping
@@ -148,7 +171,8 @@ REGLAS CLAVE
 - Si mandó comprobante de pago: "Con gusto [nombre]! Recibimos su comprobante, ya lo procesamos ✅"
 - Código Zoho (formato letras+números como "abc123"): NO es comprobante, ignorar.
 - Si mandó imagen de producto: identificar qué es y responder con disponibilidad/precio.
-- NUNCA inventes precios. Si no lo sabés con certeza: "No tengo ese precio aquí ahora mismo, puede llamarnos o pasar por tienda."
+- NUNCA inventes precios. Si no lo sabés con certeza: "No tengo ese precio aquí ahora mismo, puede llamarnos al +504 3334-0477 o pasar por tienda."
+- NUNCA digas "déjeme verificar con tienda", "le confirmo en un momento", "voy a preguntar" ni nada similar — eres un bot y no puedes hacer eso. Si no tenés el precio, redirigí directamente al teléfono o tienda.
 - NO prometas enviar cotización formal si no podés.
 - Si el cliente pregunta algo que no vendemos, díselo directamente sin rodeos.
 - CIUDAD (San Pedro / Tegucigalpa): SOLO pregunta "¿Está en San Pedro o Tegucigalpa?" cuando el cliente ya confirmó que quiere el producto (dijo "lo llevo", "me interesa", "cuánto sería en total", "cómo pago", etc.). NO preguntes la ciudad al inicio de la consulta ni durante la presentación de productos.
@@ -583,34 +607,45 @@ def detect_quote_request(text: str) -> bool:
     return any(kw in t for kw in QUOTE_TRIGGERS)
 
 
-def extract_items_for_quote(text: str, history: list) -> list[dict]:
-    """Uses Claude Haiku to extract product names and quantities from conversation."""
+def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
+    """Uses Claude Haiku to extract product names, quantities, and customer/company name.
+    Returns (items_list, customer_name_override) where customer_name_override can be empty."""
     recent_ctx = ""
-    for m in history[-6:]:
+    for m in history[-8:]:
         role = "Cliente" if m["role"] == "user" else "Bot"
-        recent_ctx += f"{role}: {m['content'][:200]}\n"
+        recent_ctx += f"{role}: {m['content'][:300]}\n"
 
     prompt = (
-        f"Del siguiente mensaje y conversación, extrae los productos y cantidades para una cotización.\n\n"
+        "Analiza la conversación y extrae:\n"
+        "1. Los PRODUCTOS que el cliente quiere cotizar (busca en TODO el historial, no solo el último mensaje)\n"
+        "2. Las CANTIDADES de cada producto\n"
+        "3. El NOMBRE o EMPRESA para la cotización (si el cliente dijo 'a nombre de X' o 'para la empresa X')\n\n"
+        "IMPORTANTE:\n"
+        "- Un nombre de empresa (como 'Proenco', 'ACSA', etc.) NO es un producto — es el destinatario.\n"
+        "- Si el cliente dijo 'de 10' o 'quiero 10', es la cantidad del producto mencionado antes.\n"
+        "- Busca productos en TODO el historial, no solo en el último mensaje.\n\n"
         f"Conversación reciente:\n{recent_ctx}\n"
         f"Mensaje actual: {text}\n\n"
-        "Responde SOLO con JSON válido, ejemplo: "
-        '[{"product": "careta basica 2 sensores", "quantity": 5}, {"product": "guantes", "quantity": 10}]\n'
-        "Si no hay productos o cantidades claras, responde: []"
+        "Responde SOLO con JSON válido en este formato:\n"
+        '{"items": [{"product": "electrodo 6010 1/8", "quantity": 10}], "customer_name": "Proenco"}\n'
+        'Si no hay productos claros: {"items": [], "customer_name": ""}'
     )
     try:
         resp = claude.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=400,
+            max_tokens=500,
             messages=[{"role": "user", "content": prompt}],
         )
         content = resp.content[0].text.strip()
-        match = re.search(r'\[.*?\]', content, re.DOTALL)
+        match = re.search(r'\{.*\}', content, re.DOTALL)
         if match:
-            return json.loads(match.group())
+            parsed = json.loads(match.group())
+            items = parsed.get("items", [])
+            customer_name = parsed.get("customer_name", "")
+            return items, customer_name
     except Exception as e:
         log_action("QuoteAgent", "extract_error", str(e))
-    return []
+    return [], ""
 
 
 def zoho_search_item_for_quote(product_name: str) -> dict | None:
@@ -741,14 +776,14 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
     history = state["conversations"].get(from_number, [])
 
     # Step 1: Extract what products the customer wants
-    items_requested = extract_items_for_quote(text, history)
+    items_requested, company_name_override = extract_items_for_quote(text, history)
 
     if not items_requested:
         wa_send(
             from_number,
             "¡Con gusto le preparo la cotización! 📋\n\n"
             "Por favor indíqueme qué productos necesita y en qué cantidades. "
-            "Ejemplo: *5 caretas básicas y 10 pares de guantes*.",
+            "Ejemplo: *10 cajas de electrodo 6010 1/8* o *5 caretas básicas*.",
         )
         return
 
@@ -763,15 +798,22 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
             not_found.append(req["product"])
 
     if not line_items:
+        product_list = ", ".join(r["product"] for r in items_requested)
         wa_send(
             from_number,
-            "No encontré esos productos en nuestro catálogo. "
-            f"Por favor comuníquese al {ELECTRODE_REDIRECT_PHONE} para una cotización personalizada.",
+            f"Identifiqué que necesita: *{product_list}*.\n\n"
+            "Sin embargo, no pude ubicar ese(os) producto(s) en nuestro sistema para generar la cotización automática. "
+            f"Por favor comuníquese al {ELECTRODE_REDIRECT_PHONE} para que le preparemos la cotización manualmente. "
+            "Podemos enviarla por WhatsApp o correo electrónico. 📋",
         )
         return
 
     # Step 3: Create the Zoho estimate
-    customer_name = from_name if from_name and from_name != from_number else "Cliente WhatsApp"
+    # Use company name from message if provided, otherwise use WhatsApp display name
+    if company_name_override and len(company_name_override) > 1:
+        customer_name = company_name_override
+    else:
+        customer_name = from_name if from_name and from_name != from_number else "Cliente WhatsApp"
     estimate = zoho_create_estimate(customer_name, from_number, line_items)
 
     if not estimate:
