@@ -62,9 +62,18 @@ FLUJO SEGÚN TIPO DE CONSULTA
    - Alambre para soldar — MIG sin gas o con gas
    - Equipo de protección — caretas, guantes, chaquetas, kits
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PRECIOS: REGLA DE ORO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+El sistema consulta Zoho Books en tiempo real para TODOS los productos.
+Si ves [INVENTARIO ZOHO — DATO REAL] con precio en el contexto:
+→ USA ese precio directamente. Da la cifra con ISV incluido. NO redirigís a tienda.
+→ Ejemplo: "El precio es L517.50 por caja de 10 lbs (ISV incluido)."
+Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el producto no está en catálogo.
+
 2. ELECTRODOS:
    Preguntar: tipo, diámetro y tamaño de caja. Los electrodos se venden por lb suelta o en cajas de 10 lbs / 50 lbs.
-   El sistema consulta Zoho en tiempo real — si ves [INVENTARIO ZOHO] con precio, úsalo directamente.
+   Si ves [INVENTARIO ZOHO] con precio, úsalo directamente.
 
    PRECIOS DE REFERENCIA — HIERROS DULCES (marca A.A., ISV incluido):
    - E6010: caja 10 lbs = L517.50 | caja 50 lbs = L2,587.50   (3/32", 1/8", 5/32")
@@ -97,8 +106,8 @@ FLUJO SEGÚN TIPO DE CONSULTA
    OTROS EPP:
    - Delantal de cuero: L632.50
    - SafeCut Defender 450 (chaqueta/kit de corte): L13,383.70
-   - GUANTES DE CUERO PARA SOLDADURA: SÍ los manejamos. Para precio exacto y disponibilidad: pasar por tienda o llamar al +504 3334-0477. NUNCA digas que no tenemos guantes — sí los tenemos.
-   - CHAQUETAS DE CUERO PARA SOLDADURA: SÍ las manejamos. Para precio: pasar por tienda o llamar.
+   - GUANTES DE CUERO PARA SOLDADURA: SÍ los manejamos. Si Zoho tiene precio, dalo directamente. Si no: llamar al +504 3334-0477. NUNCA digas que no tenemos guantes.
+   - CHAQUETAS DE CUERO PARA SOLDADURA: SÍ las manejamos. Si Zoho tiene precio, dalo. Si no: llamar al +504 3334-0477.
 
    Cuando el cliente pide foto de caretas, guantes u otro EPP: "Con gusto le mando fotos."
    (El bot enviará las fotos automáticamente — no necesitas decir nada más.)
@@ -109,15 +118,15 @@ FLUJO SEGÚN TIPO DE CONSULTA
    - ER70s-6 (acero al carbono, MIG con gas): 0.035" — rollo 1 lb o rollo 33 lbs
    - E71T-GS (flux core, sin gas): 0.030" y 0.035"
    - 600HT (flux core): 0.045" — rollo 33 lbs
-   - Alambre aluminio ER4043: 0.035" — disponible, precio: llamar al +504 3334-0477
-   - Alambre aluminio ER5356: 0.035" — disponible, precio: llamar al +504 3334-0477
-   - Alambre acero inoxidable: 0.035" — disponible, precio: llamar al +504 3334-0477
-   Para precios de alambre: si no tenés el precio exacto aquí, redirigí al +504 3334-0477 o tienda. NO digas que verificarás.
+   - Alambre aluminio ER4043: 0.035" — disponible
+   - Alambre aluminio ER5356: 0.035" — disponible
+   - Alambre acero inoxidable: 0.035" — disponible
+   Para precios: si Zoho inyecta el precio, dalo directamente. Si no hay dato de Zoho: +504 3334-0477.
    Si el cliente tiene el producto actual: pedirle foto para identificar la referencia correcta.
 
 5. VARILLAS (soldadura autógena y TIG):
    Disponibles: aluminio (liso y con fundente), acero inoxidable, bronce (lisa y revestida), hierro.
-   Para precios y diámetros: llamar a tienda o +504 3334-0477.
+   Para precios: si Zoho tiene precio, dalo directamente. Si no: +504 3334-0477.
 
 6. OXICORTE / EQUIPO DE GAS:
    MARCAS PRINCIPALES: Safecut y Victor (estas son las que más nos importan promover).
@@ -128,7 +137,7 @@ FLUJO SEGÚN TIPO DE CONSULTA
    - Safecut (equipo completo disponible) — MARCA ESTRELLA
    - Metal Power Super V-450 Deluxe (heavy duty, con maletín)
    Incluyen: cortador, maneral, reguladores, mangueras, antorcha, boquillas.
-   Para precios: "Le comparto el precio — pásese por tienda o nos llama."
+   Para precios: si Zoho inyecta el precio, dalo directamente. Si no hay dato: +504 3334-0477.
 
    GARANTÍA:
    - Victor: 1 año de garantía en regulador, antorcha y maneral. También manejamos equipo completo.
@@ -453,10 +462,13 @@ def zoho_inventory_context(text: str) -> str:
     """If the message looks like a product inquiry, query Zoho and return context string."""
     inquiry_words = [
         "tienen", "hay", "disponible", "stock", "venden", "manejan",
-        "precio", "cuánto", "cuanto", "tienen", "busco", "necesito",
+        "precio", "cuánto", "cuanto", "cuesta", "vale", "busco", "necesito",
         "electrodo", "alambre", "careta", "guante", "chaqueta", "delantal",
-        "6011", "6013", "6010", "7018", "mig", "tig", "oxicorte",
-        "disco", "lija", "esmeril", "varilla",
+        "6011", "6013", "6010", "7018", "7024", "6011", "mig", "tig", "oxicorte",
+        "disco", "lija", "esmeril", "varilla", "aluminio", "inoxidable",
+        "ni-99", "ni99", "ni-55", "ni55", "308", "309", "316", "7018",
+        "antorcha", "regulador", "boquilla", "tobera", "difusor",
+        "kit", "equipo", "victor", "safecut", "careta", "respirador",
     ]
     if not any(w in text.lower() for w in inquiry_words):
         return ""
@@ -488,9 +500,11 @@ def zoho_inventory_context(text: str) -> str:
                     f"catálogo activo. Artículos: {names_str}.{price_ctx} "
                     f"Confirma disponibilidad y da precio con ISV incluido.")
         else:
-            return (f"\n\n[INVENTARIO ZOHO — DATO REAL]: El producto '{extraction}' NO aparece en "
-                    f"nuestro catálogo activo de Zoho Books. Informa amablemente que no manejamos "
-                    f"ese artículo específico y ofrece alternativas si las hay.")
+            return (f"\n\n[INVENTARIO ZOHO — DATO REAL]: El producto '{extraction}' no se encontró "
+                    f"en Zoho Books con ese término de búsqueda. IMPORTANTE: esto NO significa que "
+                    f"no lo tengamos — puede estar catalogado diferente o con otro nombre. "
+                    f"Usa tu conocimiento del catálogo (system prompt) para responder. "
+                    f"Solo di que no lo manejamos si el system prompt tampoco lo menciona.")
     except Exception as e:
         log_action("ZohoAPI", "context_error", str(e))
         return ""
