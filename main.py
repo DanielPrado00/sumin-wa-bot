@@ -75,6 +75,13 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    Preguntar: tipo, diámetro y tamaño de caja. Los electrodos se venden por lb suelta o en cajas de 10 lbs / 50 lbs.
    Si ves [INVENTARIO ZOHO] con precio, úsalo directamente.
 
+   REGLA DE PRECIOS PARA ELECTRODOS (HIERROS DULCES, HIERRO COLADO, HARDFACING):
+   - Siempre cotizar en L/lb y total de caja (ej: "L51.00/lb | caja 10 lbs: L510.00")
+   - NUNCA cotizar por unidad (varilla individual) — si el cliente pide precio por unidad:
+     responder "Para precio por unidad, comuníquese a nuestra oficina al 2557-0640."
+   - EXCEPCIÓN: Electrodos de ACERO INOXIDABLE y TUNGSTENO para TIG sí se cotizan por unidad
+     (los precios en lista ya son por unidad para esas categorías).
+
    PRECIOS DE REFERENCIA — HIERROS DULCES (marca A.A., ISV incluido):
    - E6010: caja 10 lbs = L517.50 | caja 50 lbs = L2,587.50   (3/32", 1/8", 5/32")
    - E6011: caja 10 lbs = L517.50 | caja 50 lbs = L2,587.50   (3/32", 1/8", 5/32")
@@ -93,13 +100,16 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    - E312-16 de 1/8: L327.75/und
    - Tensile Weld de 1/8: L333.50/und | de 5/32: L356.50/und
 
-   ELECTRODOS HIERRO COLADO (precio por unidad y por caja, con ISV):
-   - NI-55 de 1/8: L52.00/und | caja: L569.25
-   - NI-55 de 3/32: L51.00/und | caja: L713.00
-   - NI-99 de 1/8 A.A.: L75.00/und | caja: L793.50
-   - NI-99 de 3/32: L67.00/und | caja: L839.50
-   - NI-99 de 5/32: L123.00/und | caja: L818.80
+   ELECTRODOS HIERRO COLADO (precio por libra y por caja de 10 lbs, con ISV):
+   - NI-55 de 1/8: L52.00/lb | caja 10 lbs: L520.00
+   - NI-55 de 3/32: L51.00/lb | caja 10 lbs: L510.00
+   - NI-99 de 1/8 A.A.: L75.00/lb | caja 10 lbs: L750.00
+   - NI-99 de 3/32: L67.00/lb | caja 10 lbs: L670.00
+   - NI-99 de 5/32: L123.00/lb | caja 10 lbs: L1,230.00
    Da estos precios directamente. SÍ manejamos NI-55 y NI-99 para hierro colado.
+   IMPORTANTE: Si el cliente pregunta por precio por UNIDAD de electrodo (varillas individuales),
+   responder: "Para precio por unidad, comuníquese a nuestra oficina al 2557-0640."
+   EXCEPCIÓN: El tungsteno para TIG SÍ se cotiza por unidad (el precio en lista ya es por unidad).
 
    ELECTRODOS ALUMINIO (precio por unidad, con ISV):
    - E4043 azul de 3/32 A.A.: L678.50/und | de 1/8 azul: L563.50/und
@@ -146,8 +156,10 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    - Gorra ignífuga: L207.00
    - SafeCut Defender 450 (kit de corte): L13,383.70
 
-   Cuando el cliente pide foto de caretas, guantes u otro EPP: "Con gusto le mando fotos."
-   (El bot enviará las fotos automáticamente — no necesitas decir nada más.)
+   Cuando el cliente pide foto de caretas, guantes u otro EPP:
+   Si el contexto incluye [FOTOS_DISPONIBLES], di solo "Con gusto le mando fotos." (el sistema las enviará).
+   Si el contexto incluye [FOTOS_NO_DISPONIBLES], di: "Para fotos puede comunicarse al +504 3334-0477 y con gusto se las enviamos."
+   NUNCA prometas enviar fotos si no hay confirmación de que están disponibles.
 
 4. MICROALAMBRE / ALAMBRE MIG:
    Preguntar: ¿con gas o sin gas? ¿qué diámetro? ¿marca actual?
@@ -1034,11 +1046,29 @@ def orchestrate(message_data: dict):
                 wa_send(from_number, f"Para fotos de electrodos puede comunicarse al {ELECTRODE_REDIRECT_PHONE} 📞")
                 return
             photos_sent = send_product_photos(from_number, photo_key)
-            if photos_sent:
-                # Also let the sales agent respond with text context
-                sales_agent(from_number, from_name, text, state)
-                return
-            # If no photos available yet, fall through to normal sales_agent
+            # Inject context so Claude knows whether photos were actually sent
+            photo_ctx = "\n\n[FOTOS_DISPONIBLES]" if photos_sent else "\n\n[FOTOS_NO_DISPONIBLES]"
+            # Always let sales_agent respond with text (with correct photo context)
+            _orig_system = SUMIN_SYSTEM
+            # Temporarily patch: pass photo context via a wrapper
+            zoho_ctx = zoho_inventory_context(text)
+            system_with_ctx = SUMIN_SYSTEM + zoho_ctx + photo_ctx
+            if from_number not in state["conversations"]:
+                state["conversations"][from_number] = []
+            meta = get_conv_meta(state, from_number)
+            if from_name and from_name != from_number:
+                meta["name"] = from_name
+            meta["last_active"] = datetime.now().isoformat()
+            meta["last_msg"] = text[:80]
+            history = state["conversations"][from_number]
+            response = claude_respond(system_with_ctx, history, text)
+            history.append({"role": "user", "content": text})
+            history.append({"role": "assistant", "content": response})
+            state["conversations"][from_number] = history[-20:]
+            wa_send(from_number, response)
+            log_action("SalesAgent", "photo_response", response[:100])
+            save_state(state)
+            return
 
         sales_agent(from_number, from_name, text, state)
         return
