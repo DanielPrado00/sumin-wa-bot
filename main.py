@@ -82,14 +82,38 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    - E7018: caja 10 lbs = L414.00 | caja 50 lbs = L2,070.00   (3/32", 1/8", 5/32")
    - E7024: caja 10 lbs = L460.00 | caja 50 lbs = L2,300.00   (1/8")
 
-   TIPOS ESPECIALES (también los manejamos — pedir precio exacto al asesor):
-   - Inoxidable: E308-16, E309-16, E310-16, E312-16, E316-16, Tensile Weld
-   - Revestimientos duros / hardfacing: E-300, E-900, Chrome Carb, Everwear 800, American Hard Plus, American Sugar
-   - Aluminio: AL-345, AL-4043
-   - Hierro colado: NI-55, NI-99
-   - Bajo hidrógeno: E-8018, E-9018, E-11018M, E-12018M
-   - Biselar/cortar: Chamfer Rod
-   Para CUALQUIER electrodo especial o precio exacto que no tengas: → comunicar al +504 3334-0477
+   ELECTRODOS ACERO INOXIDABLE (precio por unidad, con ISV):
+   - E308-16 de 1/8: L138.00/und | de 3/32: L161.00/und | de 5/32: L247.25/und
+   - E308L-16 de 1/8: L241.50/und | de 3/32: L241.50/und
+   - E309-16 de 1/8: L356.50/und | de 3/32: L356.50/und | de 5/32: L356.50/und
+   - E309L-16 de 1/8: L356.50/und
+   - E316-16 de 1/8: L356.50/und
+   - E316L-16 de 1/8: L356.50/und
+   - E310-16 de 1/8: L586.50/und | de 3/32: L546.25/und
+   - E312-16 de 1/8: L327.75/und
+   - Tensile Weld de 1/8: L333.50/und | de 5/32: L356.50/und
+
+   ELECTRODOS HIERRO COLADO (precio por unidad y por caja, con ISV):
+   - NI-55 de 1/8: L52.00/und | caja: L569.25
+   - NI-55 de 3/32: L51.00/und | caja: L713.00
+   - NI-99 de 1/8 A.A.: L75.00/und | caja: L793.50
+   - NI-99 de 3/32: L67.00/und | caja: L839.50
+   - NI-99 de 5/32: L123.00/und | caja: L818.80
+   Da estos precios directamente. SÍ manejamos NI-55 y NI-99 para hierro colado.
+
+   ELECTRODOS ALUMINIO (precio por unidad, con ISV):
+   - E4043 azul de 3/32 A.A.: L678.50/und | de 1/8 azul: L563.50/und
+   - Blanco de 1/8: L782.00/und | blanco de 3/32: L782.00/und
+
+   REVESTIMIENTOS DUROS (precio por unidad, con ISV):
+   - E-300 de 1/8: L178.25 | de 5/32: L178.25
+   - E-700 W.A. de 1/8: L129.95 | de 5/32: L129.95
+   - American Sugar A.A. de 1/8: L143.75 | de 5/32: L143.75
+   - American Hard Plus de 5/32: L483.00
+   - Chrome Carb TH60 de 1/8: L228.85 | de 5/32: L228.85
+   - Everwear 800 de 1/8: L178.25 | de 5/32: L178.25
+   - E-8018-B2 de 1/8: L241.50 | E-9018-B3 de 1/8: L241.50
+   - E-11018 de 1/8: L241.50 | E-12018M de 1/8: L241.50
 
    Si el cliente pide FOTO de electrodos → "Para fotos y detalles técnicos de electrodos puede comunicarse al +504 3334-0477"
 
@@ -103,11 +127,24 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    - Careta Panorámica (visión amplia + respirador): L4,300.00
    - Careta PAPR (sistema motorizado, máxima protección): L13,225.00
 
-   OTROS EPP:
+   GUANTES DE CUERO (precios con ISV incluido):
+   - HEATPROTECTION-14" (corto): L552.00
+   - HEATPROTECTION-18" (largo): L632.50
+   - Weldas 14" negro: L667.00
+   Da estos precios directamente. NUNCA digas que no tenemos guantes.
+
+   CHAQUETAS SOLDADOR (precios con ISV incluido):
+   - Chaqueta ignífuga A.A. talla M/L/XL: L1,725.00
+   - Chaqueta ignífuga A.A. talla XXL: L1,840.00
+   - Chaqueta cuero Black Stallion M/L/XL: L2,760.00
+   Da estos precios directamente. NUNCA digas que no tenemos chaquetas.
+
+   OTROS EPP (precios con ISV incluido):
    - Delantal de cuero: L632.50
-   - SafeCut Defender 450 (chaqueta/kit de corte): L13,383.70
-   - GUANTES DE CUERO PARA SOLDADURA: SÍ los manejamos. Si Zoho tiene precio, dalo directamente. Si no: llamar al +504 3334-0477. NUNCA digas que no tenemos guantes.
-   - CHAQUETAS DE CUERO PARA SOLDADURA: SÍ las manejamos. Si Zoho tiene precio, dalo. Si no: llamar al +504 3334-0477.
+   - Polainas: L402.50
+   - Mangas cuero con velcro: L419.75 | Mangas tela ignífuga: L287.50
+   - Gorra ignífuga: L207.00
+   - SafeCut Defender 450 (kit de corte): L13,383.70
 
    Cuando el cliente pide foto de caretas, guantes u otro EPP: "Con gusto le mando fotos."
    (El bot enviará las fotos automáticamente — no necesitas decir nada más.)
@@ -115,14 +152,14 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
 4. MICROALAMBRE / ALAMBRE MIG:
    Preguntar: ¿con gas o sin gas? ¿qué diámetro? ¿marca actual?
    TIPOS DISPONIBLES (marca American Alloy y Washington Alloy):
-   - ER70s-6 (acero al carbono, MIG con gas): 0.035" — rollo 1 lb o rollo 33 lbs
-   - E71T-GS (flux core, sin gas): 0.030" y 0.035"
-   - 600HT (flux core): 0.045" — rollo 33 lbs
-   - Alambre aluminio ER4043: 0.035" — disponible
-   - Alambre aluminio ER5356: 0.035" — disponible
-   - Alambre acero inoxidable: 0.035" — disponible
-   Para precios: si Zoho inyecta el precio, dalo directamente. Si no hay dato de Zoho: +504 3334-0477.
-   Si el cliente tiene el producto actual: pedirle foto para identificar la referencia correcta.
+   PRECIOS MICROALAMBRES (con ISV incluido):
+   - ER70S-6 cobrizado 0.035" rollo 33 lbs: L32.06/lb (rollo completo ~L1,058)
+   - E71T-GS flux core sin gas 0.030" de 2 lbs A.A.: L342.85 | de 11 lbs: L977.50
+   - 600HT flux core 0.045" 33 lbs: L293.25/lb
+   - Aluminio 4043 0.035" 1 lb: L391.00 | 4043 de 3/64" rollo 15 lbs: L402.50/lb
+   - Aluminio 5356 0.035" 1 lb: L615.25
+   - 309 Gasless inox 0.035" 2 lbs: L1,216.70
+   Da estos precios directamente cuando el cliente pregunte. Si el cliente tiene el producto actual: pedirle foto para identificar la referencia correcta.
 
 5. VARILLAS (soldadura autógena y TIG):
    Disponibles: aluminio (liso y con fundente), acero inoxidable, bronce (lisa y revestida), hierro.
