@@ -247,7 +247,12 @@ SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante'
 # Para agregar fotos: corre upload_photos.py y pega las URLs generadas aquí.
 # Formato: "keyword": ["url1", "url2", ...]
 PRODUCT_IMAGES: dict[str, list[str]] = {
-    # Se puebla con upload_photos.py — ver instrucciones abajo
+    "caretas": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pro40_Frontal.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pro40_Lateral.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pano56_Frontal.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pano56_DeLado.jpg",
+    ],
 }
 
 # Palabras clave para detectar solicitudes de foto
