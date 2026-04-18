@@ -81,10 +81,10 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    REGLA DE PRECIOS PARA ELECTRODOS (HIERROS DULCES, HIERRO COLADO, HARDFACING):
    - Siempre cotizar en L/lb y total de caja (ej: "L51.00/lb | caja 10 lbs: L510.00")
    - La cantidad mínima de venta es 1/4 de libra (un cuarto de libra).
-   - NUNCA cotizar por Unidad/varilla individual — si el cliente pide precio por Unidad o
+   - NUNCA cotizar por unidad/varilla individual — si el cliente pide precio por unidad o
      pregunta cuántas varillas trae una caja, responder:
      "Para precio o cantidad por unidad, comuníquese a nuestra oficina al 2557-0640."
-   - EXCEPCIÓN: Solo el TUNGSTENO para TIG se cotiza por unidad (el precio en lista ya es por Unidad).
+   - EXCEPCIÓN: Solo el TUNGSTENO para TIG se cotiza por unidad (el precio en lista ya es por unidad).
    - Electrodos de ACERO INOXIDABLE también se venden por lb o 1/4 de libra, misma regla.
 
    PRECIOS DE REFERENCIA — HIERROS DULCES (marca A.A., ISV incluido):
@@ -111,24 +111,26 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    - NI-99 de 1/8 A.A.: L75.00/lb | caja 10 lbs: L750.00
    - NI-99 de 3/32: L67.00/lb | caja 10 lbs: L670.00
    - NI-99 de 5/32: L123.00/lb | caja 10 lbs: L1,230.00
-   Da estos precios directamente. S� manejamos NI-55 y NI-99 para hierro colado.
+   Da estos precios directamente. SÍ manejamos NI-55 y NI-99 para hierro colado.
    IMPORTANTE: Si el cliente pregunta por precio por UNIDAD de electrodo (varillas individuales),
    responder: "Para precio por unidad, comuníquese a nuestra oficina al 2557-0640."
-   EXCEPCIÓN: El tungsteno para TIG SÍ se cotiza por unidad (el precio en lista ya es por Unidad).
+   EXCEPCIÓN: El tungsteno para TIG SÍ se cotiza por unidad (el precio en lista ya es por unidad).
 
-   ELECTRODOS ALUMINIO (precio por Unidad, con ISV):
+   ELECTRODOS ALUMINIO (precio por unidad, con ISV):
    - E4043 azul de 3/32 A.A.: L678.50/und | de 1/8 azul: L563.50/und
    - Blanco de 1/8: L782.00/und | blanco de 3/32: L782.00/und
 
-   REVESTIMIENTOS DUROS (precio por Unidad, con ISV):
-   - E-300 de 1/8: L178.25 | de 5/32: L178.25
-   - E-700 W.A. de 1/8: L129.95 | de 5/32: L129.95
-   - American Sugar A.A. de 1/8: L143.75 | de 5/32: L143.75
-   - American Hard Plus de 5/32: L483.00
-   - Chrome Carb TH60 de 1/8: L228.85 | de 5/32: L228.85
-   - Everwear 800 de 1/8: L178.25 | de 5/32: L178.25
-   - E-8018-B2 de 1/8: L241.50 | E-9018-B3 de 1/8: L241.50
-   - E-11018 de 1/8: L241.50 | E-12018M de 1/8: L241.50
+   REVESTIMIENTOS DUROS (la mayoría por unidad/varilla, con ISV — excepto donde se indica lb):
+   - E-300 de 1/8: L178.25/und | de 5/32: L178.25/und
+   - E-700 W.A. de 1/8: L129.95/und | de 5/32: L129.95/und
+   - American Sugar A.A. de 1/8: L143.75/und | de 5/32: L143.75/und
+   - American Hard Plus de 5/32: L483.00/und
+   - Chrome Carb TH60 de 1/8: L228.85/und | de 5/32: L228.85/und
+   - Everwear 800 de 1/8: L178.25/lb | de 5/32: L178.25/lb  ← SE VENDE POR LIBRA (LB)
+     * Si el cliente pregunta el precio por electrodo individual del Everwear 800, explicar:
+       "El Everwear 800 se vende por libra. La libra de 1/8" trae aproximadamente 4-5 electrodos y la de 5/32" trae aproximadamente 2-3 electrodos."
+   - E-8018-B2 de 1/8: L241.50/und | E-9018-B3 de 1/8: L241.50/und
+   - E-11018 de 1/8: L241.50/und | E-12018M de 1/8: L241.50/und
 
    Si el cliente pide FOTO de electrodos → "Para fotos y detalles técnicos de electrodos puede comunicarse al +504 3334-0477"
 
@@ -263,7 +265,8 @@ REGLAS CLAVE
 - NUNCA digas "déjeme verificar con tienda", "le confirmo en un momento", "voy a preguntar" ni nada similar — eres un bot y no puedes hacer eso. Si no tenés el precio, redirigí directamente al teléfono o tienda.
 - NO prometas enviar cotización formal si no podés.
 - Si el cliente pregunta algo que no vendemos, díselo directamente sin rodeos.
-- CIUDAD (San Pedro / Tegucigalpa): SOLO pregunta "¿Está en San Pedro o Tegucigalpa?" cuando el cliente ya confirmó que quiere el producto (dijo "lo llevo", "me interesa", "cuánto sería en total", "cómo pago", etc.). NO preguntes la ciudad al inicio de la consulta ni durante la presentación de productos.
+- CIUDAD (San Pedro / Tegucigalpa): SOLO pregunta "¿Está en San Pedro o Tegucigalpa?" cuando el cliente ya confirmó que quiere el producto (dijo "lo llevo", "me interesa", "cuánto sería en total", "cómo pago", etc.) Y NO se conoce aún su ciudad. NO preguntes la ciudad al inicio de la consulta ni durante la presentación de productos.
+- Si el contexto incluye [CIUDAD_CLIENTE: ...], ya sabes su ciudad. Nunca vuelvas a preguntar dónde está. Usa esa ciudad directamente si necesitas calcular flete o mencionar sucursal.
 """
 
 SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante',
@@ -522,6 +525,15 @@ def identify_product(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
     )
     return msg.content[0].text
 
+def detect_city(text: str) -> str | None:
+    """Detect if the user mentioned their city (San Pedro or Tegucigalpa)."""
+    t = text.lower()
+    if any(k in t for k in ['san pedro', 'sps', 'sampedro', 'pedro sula']):
+        return 'San Pedro Sula'
+    if any(k in t for k in ['tegucigalpa', 'tegu', 'comayagüela', 'comayaguela', 'tegus']):
+        return 'Tegucigalpa'
+    return None
+
 def claude_respond(system: str, conversation_history: list, new_message: str) -> str:
     messages = conversation_history[-10:] + [{"role": "user", "content": new_message}]
     msg = claude.messages.create(
@@ -745,9 +757,24 @@ def sales_agent(from_number: str, from_name: str, text: str, state: dict):
     meta["last_active"] = datetime.now().isoformat()
     meta["last_msg"] = text[:80]
     history = state["conversations"][from_number]
+    # Detect and persist city from the new message (and also scan recent history)
+    detected = detect_city(text)
+    if detected:
+        meta["ciudad"] = detected
+    elif not meta.get("ciudad"):
+        # Scan last few history messages for a city mention
+        for msg in (history[-6:] if len(history) >= 6 else history):
+            c = detect_city(msg.get("content", ""))
+            if c:
+                meta["ciudad"] = c
+                break
+    # Inject city context so Claude never asks again once known
+    city_ctx = ""
+    if meta.get("ciudad"):
+        city_ctx = f"\n\n[CIUDAD_CLIENTE: {meta['ciudad']}]"
     # Inject live Zoho inventory data before Claude responds
     zoho_ctx = zoho_inventory_context(text)
-    system = SUMIN_SYSTEM + zoho_ctx
+    system = SUMIN_SYSTEM + city_ctx + zoho_ctx
     response = claude_respond(system, history, text)
     history.append({"role": "user", "content": text})
     history.append({"role": "assistant", "content": response})
@@ -825,7 +852,7 @@ def fulfillment_agent(message_data: dict, state: dict) -> bool:
     return True
 
 # ════════════════════════════════════════════════════════════════════════════════
-# ─── ZOHO ESTIMATES / COTIZACIONES ────────────────────────────────────────────
+# ─── ZOHO ESTIMATES / COTIZACIONES ───────────────────────────────────────────
 # ════════════════════════════════════════════════════════════════════════════════
 
 QUOTE_TRIGGERS = [
@@ -1478,4 +1505,4 @@ async def privacy():
 <p><strong>Suministros Internacionales HN (SUMIN)</strong> - Abril 2026</p>
 <p>Recopilamos el contenido de mensajes y número de teléfono únicamente para atender su solicitud comercial. No compartimos su información con terceros.</p>
 <p>Contacto: <a href="mailto:danielprado@suminhn.com">danielprado@suminhn.com</a></p>
-</body></html>""", media_type="text/html"
+</body></html>""", media_type="text/html")
