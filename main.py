@@ -53,6 +53,8 @@ ESTILO DE RESPUESTA
 - No hagas más de una pregunta a la vez.
 - Cuando el cliente ya dio la información necesaria, da el precio directamente, no sigas preguntando.
 - Cierra siempre con calidez: "estamos para servirle", "un placer atenderle", o "estaremos pendientes".
+- Si el cliente pide varios productos en mensajes separados, cotiza CADA UNO a medida que los pida,
+  pero NO repitas preguntas que ya le hiciste antes (ciudad, forma de pago, etc.).
 
 ═══════════════════════════════════════
 FLUJO SEGÚN TIPO DE CONSULTA
@@ -78,14 +80,26 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    Preguntar: tipo, diámetro y tamaño de caja. Los electrodos se venden por lb suelta o en cajas de 10 lbs / 50 lbs.
    Si ves [INVENTARIO ZOHO] con precio, úsalo directamente.
 
-   REGLA DE PRECIOS PARA ELECTRODOS (HIERROS DULCES, HIERRO COLADO, HARDFACING):
+   REGLA DE PRECIOS PARA ELECTRODOS (HIERROS DULCES, HIERRO COLADO, HARDFACING, INOX):
    - Siempre cotizar en L/lb y total de caja (ej: "L51.00/lb | caja 10 lbs: L510.00")
    - La cantidad mínima de venta es 1/4 de libra (un cuarto de libra).
-   - NUNCA cotizar por unidad/varilla individual — si el cliente pide precio por unidad o
-     pregunta cuántas varillas trae una caja, responder:
-     "Para precio o cantidad por unidad, comuníquese a nuestra oficina al 2557-0640."
-   - EXCEPCIÓN: Solo el TUNGSTENO para TIG se cotiza por unidad (el precio en lista ya es por unidad).
-   - Electrodos de ACERO INOXIDABLE también se venden por lb o 1/4 de libra, misma regla.
+
+   ━━━ REGLA PARA CLIENTES QUE PIDEN POR UNIDAD (MUY IMPORTANTE) ━━━
+   Si el cliente pide precio "por unidad" / "por electrodo" / "1 solo" / "suelto":
+   → NO redirigir al teléfono. OFRECER 1/4 de libra con el precio calculado:
+      precio_cuarto = (precio_por_lb) ÷ 4, con ISV ya incluido.
+   → Ejemplo: "El E308-16 3/32 lo vendemos por libra (L161/lb) o mínimo 1/4 de lb
+      que sería L40.25 con ISV incluido. ¿Le parece bien 1/4 de lb?"
+   → Ejemplo: "El Everwear 800 de 1/8 está a L178.25/lb. El 1/4 de lb sería L44.56 con ISV."
+
+   Si el cliente pregunta CUÁNTAS varillas/unidades trae una libra o una caja:
+   → NO inventar el número. Responder: "Para saber cuántas unidades trae exactamente
+      la libra, comuníquese al +504 3334-0477 y con gusto le confirman el dato."
+
+   EXCEPCIONES (estos SÍ se cotizan por unidad, el precio en lista ya es por unidad):
+   - TUNGSTENO para TIG
+   - ELECTRODOS DE ALUMINIO (E4043 azul/blanco)
+   - REVESTIMIENTOS DUROS excepto Everwear 800 (E-300, E-700, American Sugar, Chrome Carb, etc.)
 
    PRECIOS DE REFERENCIA — HIERROS DULCES (marca A.A., ISV incluido):
    - E6010: caja 10 lbs = L517.50 | caja 50 lbs = L2,587.50   (3/32", 1/8", 5/32")
@@ -112,25 +126,29 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    - NI-99 de 3/32: L67.00/lb | caja 10 lbs: L670.00
    - NI-99 de 5/32: L123.00/lb | caja 10 lbs: L1,230.00
    Da estos precios directamente. SÍ manejamos NI-55 y NI-99 para hierro colado.
-   IMPORTANTE: Si el cliente pregunta por precio por UNIDAD de electrodo (varillas individuales),
-   responder: "Para precio por unidad, comuníquese a nuestra oficina al 2557-0640."
-   EXCEPCIÓN: El tungsteno para TIG SÍ se cotiza por unidad (el precio en lista ya es por unidad).
 
-   ELECTRODOS ALUMINIO (precio por unidad, con ISV):
+   ELECTRODOS ALUMINIO (precio POR UNIDAD, con ISV):
    - E4043 azul de 3/32 A.A.: L678.50/und | de 1/8 azul: L563.50/und
    - Blanco de 1/8: L782.00/und | blanco de 3/32: L782.00/und
+   Nota: los de aluminio SÍ se cotizan por unidad individual (no por caja/libra).
 
-   REVESTIMIENTOS DUROS (la mayoría por unidad/varilla, con ISV — excepto donde se indica lb):
+   REVESTIMIENTOS DUROS (la mayoría POR UNIDAD, con ISV — OJO CON EVERWEAR 800):
    - E-300 de 1/8: L178.25/und | de 5/32: L178.25/und
    - E-700 W.A. de 1/8: L129.95/und | de 5/32: L129.95/und
    - American Sugar A.A. de 1/8: L143.75/und | de 5/32: L143.75/und
    - American Hard Plus de 5/32: L483.00/und
    - Chrome Carb TH60 de 1/8: L228.85/und | de 5/32: L228.85/und
-   - Everwear 800 de 1/8: L178.25/lb | de 5/32: L178.25/lb  ← SE VENDE POR LIBRA (LB)
-     * Si el cliente pregunta el precio por electrodo individual del Everwear 800, explicar:
-       "El Everwear 800 se vende por libra. La libra de 1/8" trae aproximadamente 4-5 electrodos y la de 5/32" trae aproximadamente 2-3 electrodos."
    - E-8018-B2 de 1/8: L241.50/und | E-9018-B3 de 1/8: L241.50/und
    - E-11018 de 1/8: L241.50/und | E-12018M de 1/8: L241.50/und
+
+   ⚠️ EVERWEAR 800 — EXCEPCIÓN, se vende POR LIBRA (NO por unidad):
+   - Everwear 800 de 1/8: L178.25/lb
+   - Everwear 800 de 5/32: L178.25/lb
+   - Mínimo 1/4 de libra. 1/4 de lb = L44.56 (con ISV incluido).
+   - Si el cliente pide "1 Everwear 800" o "por unidad": responder:
+     "El Everwear 800 se vende por libra, no por unidad. La libra está a L178.25
+      y el mínimo es 1/4 de lb = L44.56 con ISV. ¿Le parece bien 1/4 de libra?"
+   - Si pregunta cuántos electrodos trae la libra: redirigir al +504 3334-0477.
 
    Si el cliente pide FOTO de electrodos → "Para fotos y detalles técnicos de electrodos puede comunicarse al +504 3334-0477"
 
@@ -265,8 +283,20 @@ REGLAS CLAVE
 - NUNCA digas "déjeme verificar con tienda", "le confirmo en un momento", "voy a preguntar" ni nada similar — eres un bot y no puedes hacer eso. Si no tenés el precio, redirigí directamente al teléfono o tienda.
 - NO prometas enviar cotización formal si no podés.
 - Si el cliente pregunta algo que no vendemos, díselo directamente sin rodeos.
-- CIUDAD (San Pedro / Tegucigalpa): SOLO pregunta "¿Está en San Pedro o Tegucigalpa?" cuando el cliente ya confirmó que quiere el producto (dijo "lo llevo", "me interesa", "cuánto sería en total", "cómo pago", etc.) Y NO se conoce aún su ciudad. NO preguntes la ciudad al inicio de la consulta ni durante la presentación de productos.
-- Si el contexto incluye [CIUDAD_CLIENTE: ...], ya sabes su ciudad. Nunca vuelvas a preguntar dónde está. Usa esa ciudad directamente si necesitas calcular flete o mencionar sucursal.
+
+━━━ REGLA DE CIUDAD — MUY IMPORTANTE, NUNCA PREGUNTAR MÁS DE UNA VEZ ━━━
+- SOLO pregunta "¿Está en San Pedro o Tegucigalpa?" cuando el cliente ya confirmó que quiere
+  el producto (dijo "lo llevo", "me interesa", "cuánto sería en total", "cómo pago", etc.)
+  Y NO se conoce aún su ciudad.
+- NO preguntes la ciudad al inicio de la consulta ni durante la presentación de productos.
+- Si el contexto incluye [CIUDAD_CLIENTE: ...], ya sabes su ciudad. Nunca vuelvas a preguntar
+  dónde está. Usa esa ciudad directamente si necesitas calcular flete o mencionar sucursal.
+- Si el contexto incluye [CIUDAD_YA_PREGUNTADA_ANTES]: ya preguntaste por la ciudad en un mensaje
+  anterior y el cliente aún no la ha dicho. NO vuelvas a preguntar. Continúa la conversación
+  normalmente dando precios/información. Si el cliente eventualmente confirma la compra y
+  necesitás la ciudad para envío, asume San Pedro Sula como default y continuá.
+- Si el cliente manda varios productos en mensajes seguidos, NO preguntes ciudad después de
+  cada uno — una sola pregunta por conversación es suficiente.
 """
 
 SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante',
@@ -274,9 +304,6 @@ SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante'
                    'delantal', 'escudo', 'varilla', 'disco', 'lija', 'esmeril']
 
 # ─── PRODUCT IMAGES ──────────────────────────────────────────────────────────
-# URLs de imágenes hospedadas en GitHub (raw.githubusercontent.com).
-# Para agregar fotos: corre upload_photos.py y pega las URLs generadas aquí.
-# Formato: "keyword": ["url1", "url2", ...]
 PRODUCT_IMAGES: dict[str, list[str]] = {
     "caretas": [
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pro40_Frontal.jpg",
@@ -314,19 +341,15 @@ PRODUCT_IMAGES: dict[str, list[str]] = {
     ],
 }
 
-# Palabras clave para detectar solicitudes de foto
 PHOTO_KEYWORDS = ["foto", "fotos", "imagen", "imágen", "ver", "manda", "mandame",
                   "mándame", "muéstrame", "muestrame", "como es", "cómo es", "pic", "picture"]
 
-# Productos que se REDIRIGEN al teléfono (no tenemos fotos del bot)
 ELECTRODE_REDIRECT_PHONE = "+504 3334-0477"
 
 def detect_photo_request(text: str) -> str | None:
-    """Detect if user is asking for product photos. Returns product keyword or None."""
     text_lower = text.lower()
     if not any(w in text_lower for w in PHOTO_KEYWORDS):
         return None
-    # Map product keywords to PRODUCT_IMAGES keys
     product_map = {
         "careta":      "caretas",
         "caretas":     "caretas",
@@ -347,7 +370,6 @@ def detect_photo_request(text: str) -> str | None:
         "manguera":    "manguera_argon",
         "regulador":   "reguladores",
         "antorcha":    "antorchas",
-        "delantal":    "delantal",
         "respirador":  "respiradores",
         "manga":       "mangas",
         "mangas":      "mangas",
@@ -360,7 +382,6 @@ def detect_photo_request(text: str) -> str | None:
     return None
 
 def download_github_image(raw_url: str) -> bytes:
-    """Download an image from a private GitHub repo using the token."""
     try:
         r = httpx.get(
             raw_url,
@@ -376,16 +397,12 @@ def download_github_image(raw_url: str) -> bytes:
     return b""
 
 def send_product_photos(to: str, product_key: str) -> bool:
-    """Send product photos via WhatsApp. Returns True if photos were sent.
-    Downloads from private GitHub repo and uploads to WhatsApp media API.
-    """
-    # Electrodes → redirect to phone, don't send
     if "electrodo" in product_key or "electrode" in product_key:
         wa_send(to, f"Para fotos de electrodos puede comunicarse al {ELECTRODE_REDIRECT_PHONE} 📞")
         return True
     urls = PRODUCT_IMAGES.get(product_key, [])
     if not urls:
-        return False  # No photos configured yet
+        return False
     caption_map = {
         "caretas":        "Caretas para soldadura — SUMIN",
         "guantes":        "Guantes de cuero para soldadura — SUMIN",
@@ -404,7 +421,7 @@ def send_product_photos(to: str, product_key: str) -> bool:
     }
     caption = caption_map.get(product_key, "SUMIN — Suministros Internacionales HN")
     sent = 0
-    for raw_url in urls[:7]:  # Max 7 photos per product
+    for raw_url in urls[:7]:
         filename = raw_url.split("/")[-1]
         img_bytes = download_github_image(raw_url)
         if not img_bytes:
@@ -414,7 +431,6 @@ def send_product_photos(to: str, product_key: str) -> bool:
         if not media_id:
             log_action("PhotoAgent", "upload_failed", filename)
             continue
-        # Send first photo with caption, rest without
         wa_url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
         headers = {"Authorization": f"Bearer {WA_TOKEN}", "Content-Type": "application/json"}
         body = {
@@ -471,7 +487,6 @@ def wa_send(to: str, text: str):
     return r.json()
 
 def wa_send_image_url(to: str, url: str, caption: str = ""):
-    """Send a product image from a public URL via WhatsApp."""
     wa_url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {WA_TOKEN}", "Content-Type": "application/json"}
     body = {
@@ -526,13 +541,25 @@ def identify_product(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
     return msg.content[0].text
 
 def detect_city(text: str) -> str | None:
-    """Detect if the user mentioned their city (San Pedro or Tegucigalpa)."""
     t = text.lower()
     if any(k in t for k in ['san pedro', 'sps', 'sampedro', 'pedro sula']):
         return 'San Pedro Sula'
     if any(k in t for k in ['tegucigalpa', 'tegu', 'comayagüela', 'comayaguela', 'tegus']):
         return 'Tegucigalpa'
     return None
+
+def bot_asked_city(response: str) -> bool:
+    """Detect if the bot's response contains a question asking for the customer's city."""
+    r = response.lower()
+    # Typical phrasing includes both cities + a question mark
+    has_both = ("san pedro" in r or "sps" in r) and ("tegucigalpa" in r or "tegu" in r)
+    has_question = "?" in response or "¿" in response
+    # Also catch standalone "dónde está" / "de dónde nos escribe"
+    asks_location = any(p in r for p in [
+        "¿dónde está", "de dónde nos escribe", "de dónde es",
+        "¿está en san pedro", "está en san pedro o tegucigalpa"
+    ])
+    return (has_both and has_question) or asks_location
 
 def claude_respond(system: str, conversation_history: list, new_message: str) -> str:
     messages = conversation_history[-10:] + [{"role": "user", "content": new_message}]
@@ -545,7 +572,6 @@ def claude_respond(system: str, conversation_history: list, new_message: str) ->
     return msg.content[0].text
 
 def get_conv_meta(state: dict, conv_key: str) -> dict:
-    """Get or initialize per-conversation metadata."""
     if 'conv_meta' not in state:
         state['conv_meta'] = {}
     if conv_key not in state['conv_meta']:
@@ -554,10 +580,9 @@ def get_conv_meta(state: dict, conv_key: str) -> dict:
 
 # ─── ZOHO BOOKS INTEGRATION ──────────────────────────────────────────────────
 _zoho_token_cache: dict = {"token": None, "expires": 0.0}
-_zoho_catalog_cache: dict = {"items": [], "expires": 0.0}  # Full product catalog cache
+_zoho_catalog_cache: dict = {"items": [], "expires": 0.0}
 
 def get_zoho_access_token() -> str | None:
-    """Return a valid Zoho access token, refreshing if expired."""
     global _zoho_token_cache
     if not ZOHO_REFRESH_TOKEN:
         return None
@@ -587,10 +612,6 @@ def get_zoho_access_token() -> str | None:
     return None
 
 def zoho_check_item(query: str) -> dict | None:
-    """Search Zoho Books for an active item matching query.
-    Returns {"found": True, "names": [...], "rate": float, "unit": str}
-         or {"found": False} or None on error.
-    """
     token = get_zoho_access_token()
     if not token or not ZOHO_ORG_ID:
         return None
@@ -608,7 +629,6 @@ def zoho_check_item(query: str) -> dict | None:
         items = r.json().get("items", [])
         if items:
             names = [i.get("item_name", "") for i in items[:4]]
-            # Get the rate (price before ISV) from the best match
             rate  = items[0].get("rate", 0.0)
             unit  = items[0].get("unit", "")
             log_action("ZohoAPI", "item_found", f"'{query}' → {names} rate={rate}")
@@ -620,7 +640,6 @@ def zoho_check_item(query: str) -> dict | None:
         return None
 
 def fetch_zoho_catalog() -> list:
-    """Fetch and cache all active Zoho items (refreshes every hour)."""
     global _zoho_catalog_cache
     now = time.time()
     if _zoho_catalog_cache["items"] and now < _zoho_catalog_cache["expires"]:
@@ -656,13 +675,11 @@ def fetch_zoho_catalog() -> list:
         return all_items
     except Exception as e:
         log_action("ZohoAPI", "catalog_error", str(e))
-        return _zoho_catalog_cache["items"]  # Return stale cache on error
+        return _zoho_catalog_cache["items"]
 
 def match_product_to_catalog(client_query: str, catalog: list) -> dict | None:
-    """Use Claude Haiku to find the best matching Zoho product for a client's natural-language query."""
     if not catalog:
         return None
-    # Build compact catalog text for Claude
     catalog_lines = []
     for item in catalog:
         name = item.get("item_name", "")
@@ -684,7 +701,6 @@ def match_product_to_catalog(client_query: str, catalog: list) -> dict | None:
         ).content[0].text.strip()
         if not response or response.upper() == "NINGUNO":
             return None
-        # Find item by SKU (exact then partial)
         sku_clean = response.strip()
         for item in catalog:
             if item.get("sku", "").strip() == sku_clean:
@@ -698,25 +714,22 @@ def match_product_to_catalog(client_query: str, catalog: list) -> dict | None:
         return None
 
 def zoho_inventory_context(text: str) -> str:
-    """If the message looks like a product inquiry, query Zoho and return context string."""
     inquiry_words = [
         "tienen", "hay", "disponible", "stock", "venden", "manejan",
         "precio", "cuánto", "cuanto", "cuesta", "vale", "busco", "necesito",
         "electrodo", "alambre", "careta", "guante", "chaqueta", "delantal",
-        "6011", "6013", "6010", "7018", "7024", "6011", "mig", "tig", "oxicorte",
+        "6011", "6013", "6010", "7018", "7024", "mig", "tig", "oxicorte",
         "disco", "lija", "esmeril", "varilla", "aluminio", "inoxidable",
-        "ni-99", "ni99", "ni-55", "ni55", "308", "309", "316", "7018",
+        "ni-99", "ni99", "ni-55", "ni55", "308", "309", "316",
         "antorcha", "regulador", "boquilla", "tobera", "difusor",
-        "kit", "equipo", "victor", "safecut", "careta", "respirador",
+        "kit", "equipo", "victor", "safecut", "respirador",
     ]
     if not any(w in text.lower() for w in inquiry_words):
         return ""
     try:
-        # 1. Get full Zoho catalog (cached, refreshes every hour)
         catalog = fetch_zoho_catalog()
         if not catalog:
-            return ""   # Zoho unreachable — don't alter response
-        # 2. Use AI to match client's natural-language query to exact Zoho product
+            return ""
         matched = match_product_to_catalog(text, catalog)
         if matched:
             item_name = matched.get("item_name", "")
@@ -745,37 +758,53 @@ def zoho_inventory_context(text: str) -> str:
 # ─── SUMIN AGENTS ────────────────────────────────────────────────────────────
 # ════════════════════════════════════════════════════════════════════════════════
 
+def _build_city_context(meta: dict) -> str:
+    """Build [CIUDAD_CLIENTE] or [CIUDAD_YA_PREGUNTADA_ANTES] context string."""
+    if meta.get("ciudad"):
+        return f"\n\n[CIUDAD_CLIENTE: {meta['ciudad']}]"
+    if meta.get("city_asked"):
+        return ("\n\n[CIUDAD_YA_PREGUNTADA_ANTES: Ya preguntaste la ciudad en un mensaje "
+                "anterior. NO vuelvas a preguntar. Si necesitás ciudad para flete/envío, "
+                "asume San Pedro Sula por defecto y continuá.]")
+    return ""
+
+def _update_city_from_text(meta: dict, text: str, history: list):
+    """Detect city from new message or recent history; persist to meta."""
+    detected = detect_city(text)
+    if detected:
+        meta["ciudad"] = detected
+        return
+    if not meta.get("ciudad"):
+        for msg in (history[-6:] if len(history) >= 6 else history):
+            c = detect_city(msg.get("content", ""))
+            if c:
+                meta["ciudad"] = c
+                return
+
 def sales_agent(from_number: str, from_name: str, text: str, state: dict):
     """SUMIN: Handle sales inquiries with real-time Zoho inventory check."""
     log_action("SalesAgent", "processing", f"{from_name}: {text}")
     if from_number not in state["conversations"]:
         state["conversations"][from_number] = []
-    # Track contact name and last active time
     meta = get_conv_meta(state, from_number)
     if from_name and from_name != from_number:
         meta["name"] = from_name
     meta["last_active"] = datetime.now().isoformat()
     meta["last_msg"] = text[:80]
     history = state["conversations"][from_number]
-    # Detect and persist city from the new message (and also scan recent history)
-    detected = detect_city(text)
-    if detected:
-        meta["ciudad"] = detected
-    elif not meta.get("ciudad"):
-        # Scan last few history messages for a city mention
-        for msg in (history[-6:] if len(history) >= 6 else history):
-            c = detect_city(msg.get("content", ""))
-            if c:
-                meta["ciudad"] = c
-                break
-    # Inject city context so Claude never asks again once known
-    city_ctx = ""
-    if meta.get("ciudad"):
-        city_ctx = f"\n\n[CIUDAD_CLIENTE: {meta['ciudad']}]"
-    # Inject live Zoho inventory data before Claude responds
+
+    _update_city_from_text(meta, text, history)
+    city_ctx = _build_city_context(meta)
     zoho_ctx = zoho_inventory_context(text)
     system = SUMIN_SYSTEM + city_ctx + zoho_ctx
     response = claude_respond(system, history, text)
+
+    # If Claude asked about city in this response, mark it as asked so we don't
+    # ask again in future messages of this same conversation.
+    if not meta.get("ciudad") and bot_asked_city(response):
+        meta["city_asked"] = True
+        log_action("SalesAgent", "city_asked_flag", from_number)
+
     history.append({"role": "user", "content": text})
     history.append({"role": "assistant", "content": response})
     state["conversations"][from_number] = history[-20:]
@@ -784,7 +813,6 @@ def sales_agent(from_number: str, from_name: str, text: str, state: dict):
     save_state(state)
 
 def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str, state: dict):
-    """SUMIN: Handle image messages."""
     log_action("VisionAgent", "processing_image", f"{from_name} sent image")
     image_bytes = wa_download_image(media_id)
     if not image_bytes:
@@ -793,11 +821,10 @@ def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str
         payment_agent(from_number, from_name, media_id, image_bytes, state)
     else:
         product_info = identify_product(image_bytes, mime_type)
-        response = f"Identificamos el producto:\n\n{product_info}\n\n¿Cuántas unidades necesita y para qué ciudad es el envío?"
+        response = f"Identificamos el producto:\n\n{product_info}\n\n¿Cuántas unidades necesita?"
         wa_send(from_number, response)
 
 def payment_agent(from_number: str, from_name: str, media_id: str, image_bytes: bytes, state: dict):
-    """SUMIN: Handle payment comprobante."""
     log_action("PaymentAgent", "processing", f"Comprobante from {from_name}")
     client_name = from_name.split()[0] if from_name else "estimado cliente"
     wa_send(from_number, f"Con gusto {client_name}! Recibimos su comprobante, ya lo procesamos ✅")
@@ -822,7 +849,6 @@ def payment_agent(from_number: str, from_name: str, media_id: str, image_bytes: 
     save_state(state)
 
 def fulfillment_agent(message_data: dict, state: dict) -> bool:
-    """SUMIN: Monitor messages from Oficina SPS."""
     OFICINA_SPS_NUMBER = os.environ.get("WA_OFICINA_SPS", "")
     if message_data.get("from", "") != OFICINA_SPS_NUMBER:
         return False
@@ -860,17 +886,16 @@ QUOTE_TRIGGERS = [
     "estimación", "estimacion", "precio formal", "factura proforma",
     "me pueden cotizar", "me das una coti", "necesito una coti",
     "quiero una coti", "me hacen una coti", "pueden cotizar",
+    "hágame cotización", "hagame cotizacion", "hágame una cotización",
 ]
 
 def detect_quote_request(text: str) -> bool:
-    """Returns True if the customer is asking for a formal quote/estimate."""
     t = text.lower()
     return any(kw in t for kw in QUOTE_TRIGGERS)
 
 
 def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
-    """Uses Claude Haiku to extract product names, quantities, and customer/company name.
-    Returns (items_list, customer_name_override) where customer_name_override can be empty."""
+    """Extract products, quantities, and customer/company name from conversation."""
     recent_ctx = ""
     for m in history[-8:]:
         role = "Cliente" if m["role"] == "user" else "Bot"
@@ -910,7 +935,19 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
 
 
 def zoho_search_item_for_quote(product_name: str) -> dict | None:
-    """Searches Zoho Books for an item and returns its id, name, rate."""
+    """Match a natural-language product description against the full Zoho catalog using AI.
+    Falls back to raw search_text if the AI matcher returns nothing."""
+    catalog = fetch_zoho_catalog()
+    if catalog:
+        matched = match_product_to_catalog(product_name, catalog)
+        if matched:
+            return {
+                "item_id": matched.get("item_id", ""),
+                "name":    matched.get("item_name", ""),
+                "rate":    matched.get("rate", 0.0),
+                "unit":    matched.get("unit", ""),
+            }
+    # Fallback: direct Zoho search
     token = get_zoho_access_token()
     if not token or not ZOHO_ORG_ID:
         return None
@@ -924,20 +961,90 @@ def zoho_search_item_for_quote(product_name: str) -> dict | None:
         items = r.json().get("items", [])
         if items:
             i = items[0]
-            return {"item_id": i.get("item_id", ""), "name": i.get("item_name", ""), "rate": i.get("rate", 0.0), "unit": i.get("unit", "")}
+            return {"item_id": i.get("item_id", ""), "name": i.get("item_name", ""),
+                    "rate": i.get("rate", 0.0), "unit": i.get("unit", "")}
     except Exception as e:
         log_action("ZohoAPI", "quote_search_error", str(e))
     return None
 
 
-def zoho_create_estimate(customer_name: str, customer_phone: str, line_items: list[dict]) -> dict | None:
-    """
-    Creates a Zoho Books estimate.
-    line_items: [{"item_id": str, "name": str, "quantity": int, "rate": float, "unit": str}]
-    Returns the estimate dict (with estimate_id, estimate_number, total, etc.) or None.
-    """
+def zoho_get_or_create_customer(name: str, phone: str) -> str | None:
+    """Return contact_id for the given customer name.
+    1) Search existing contacts by name (case-insensitive contains).
+    2) If none found, create a new contact with San Pedro Sula as billing city.
+    Returns None if Zoho is unreachable or both attempts fail."""
     token = get_zoho_access_token()
     if not token or not ZOHO_ORG_ID:
+        return None
+    clean_name = (name or "").strip()
+    if not clean_name:
+        return None
+    # 1) Search existing
+    try:
+        r = httpx.get(
+            "https://www.zohoapis.com/books/v3/contacts",
+            params={"organization_id": ZOHO_ORG_ID, "contact_name_contains": clean_name},
+            headers={"Authorization": f"Zoho-oauthtoken {token}"},
+            timeout=10,
+        )
+        contacts = r.json().get("contacts", [])
+        # Prefer exact (case-insensitive) match
+        for c in contacts:
+            if c.get("contact_name", "").strip().lower() == clean_name.lower():
+                cid = c.get("contact_id")
+                log_action("ZohoAPI", "customer_match_exact", f"{clean_name} → {cid}")
+                return cid
+        # Otherwise take first result
+        if contacts:
+            cid = contacts[0].get("contact_id")
+            log_action("ZohoAPI", "customer_match_partial",
+                       f"{clean_name} → {contacts[0].get('contact_name')} ({cid})")
+            return cid
+    except Exception as e:
+        log_action("ZohoAPI", "customer_search_error", str(e))
+    # 2) Create new
+    try:
+        payload = {
+            "contact_name": clean_name,
+            "contact_type": "customer",
+            "billing_address": {"city": "San Pedro Sula", "country": "Honduras"},
+            "shipping_address": {"city": "San Pedro Sula", "country": "Honduras"},
+        }
+        if phone:
+            payload["contact_persons"] = [{
+                "first_name": clean_name[:100],
+                "phone": phone,
+                "mobile": phone,
+                "is_primary_contact": True,
+            }]
+        r = httpx.post(
+            "https://www.zohoapis.com/books/v3/contacts",
+            params={"organization_id": ZOHO_ORG_ID},
+            headers={"Authorization": f"Zoho-oauthtoken {token}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=15,
+        )
+        if r.status_code in (200, 201):
+            cid = r.json().get("contact", {}).get("contact_id")
+            if cid:
+                log_action("ZohoAPI", "customer_created", f"{clean_name} → {cid}")
+                return cid
+        log_action("ZohoAPI", "customer_create_error",
+                   f"status={r.status_code} body={r.text[:250]}")
+    except Exception as e:
+        log_action("ZohoAPI", "customer_create_exc", str(e))
+    return None
+
+
+def zoho_create_estimate(customer_name: str, customer_phone: str, line_items: list[dict]) -> dict | None:
+    """Create a Zoho Books estimate. Requires customer_id, which we look up
+    (or create) via zoho_get_or_create_customer."""
+    token = get_zoho_access_token()
+    if not token or not ZOHO_ORG_ID:
+        return None
+    customer_id = zoho_get_or_create_customer(customer_name, customer_phone)
+    if not customer_id:
+        log_action("ZohoAPI", "estimate_no_customer", customer_name)
         return None
     formatted = [
         {"item_id": li["item_id"], "name": li["name"], "quantity": li["quantity"],
@@ -945,10 +1052,10 @@ def zoho_create_estimate(customer_name: str, customer_phone: str, line_items: li
         for li in line_items
     ]
     payload = {
-        "customer_name": customer_name,
-        "line_items": formatted,
-        "notes": f"Cotización vía WhatsApp — {customer_phone}",
-        "terms": "Precios incluyen ISV (15%). Válida por 15 días.",
+        "customer_id": customer_id,
+        "line_items":  formatted,
+        "notes":       f"Cotización vía WhatsApp — {customer_phone}",
+        "terms":       "Precios incluyen ISV (15%). Válida por 15 días.",
     }
     try:
         r = httpx.post(
@@ -958,9 +1065,10 @@ def zoho_create_estimate(customer_name: str, customer_phone: str, line_items: li
             json=payload,
             timeout=15,
         )
-        if r.status_code == 201:
+        if r.status_code in (200, 201):
             est = r.json().get("estimate", {})
-            log_action("ZohoAPI", "estimate_created", f"#{est.get('estimate_number')} for {customer_name}")
+            log_action("ZohoAPI", "estimate_created",
+                       f"#{est.get('estimate_number')} for {customer_name} (cust_id={customer_id})")
             return est
         log_action("ZohoAPI", "estimate_error", f"status={r.status_code} body={r.text[:300]}")
     except Exception as e:
@@ -969,7 +1077,6 @@ def zoho_create_estimate(customer_name: str, customer_phone: str, line_items: li
 
 
 def zoho_get_estimate_pdf(estimate_id: str) -> bytes | None:
-    """Downloads the estimate as PDF bytes from Zoho Books."""
     token = get_zoho_access_token()
     if not token or not ZOHO_ORG_ID:
         return None
@@ -988,7 +1095,6 @@ def zoho_get_estimate_pdf(estimate_id: str) -> bytes | None:
 
 
 def wa_upload_media(file_bytes: bytes, mime_type: str, filename: str) -> str | None:
-    """Uploads a file to WhatsApp media API and returns the media_id."""
     url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/media"
     headers = {"Authorization": f"Bearer {WA_TOKEN}"}
     files = {
@@ -1007,7 +1113,6 @@ def wa_upload_media(file_bytes: bytes, mime_type: str, filename: str) -> str | N
 
 
 def wa_send_document(to: str, file_bytes: bytes, filename: str, caption: str = ""):
-    """Uploads and sends a document (PDF, etc.) via WhatsApp."""
     media_id = wa_upload_media(file_bytes, "application/pdf", filename)
     if not media_id:
         log_action("WA_SEND", "doc_upload_failed", filename)
@@ -1026,17 +1131,11 @@ def wa_send_document(to: str, file_bytes: bytes, filename: str, caption: str = "
 
 
 def quote_agent(from_number: str, from_name: str, text: str, state: dict):
-    """
-    Handles formal quote requests:
-    1. Extracts products/quantities from message + history
-    2. Looks up items in Zoho
-    3. Creates Zoho estimate
-    4. Sends summary text + PDF to customer via WhatsApp
-    """
+    """Generate a formal Zoho Books estimate + PDF and send it via WhatsApp."""
     log_action("QuoteAgent", "start", f"{from_name}: {text[:80]}")
     history = state["conversations"].get(from_number, [])
 
-    # Step 1: Extract what products the customer wants
+    # 1) Extract products + optional company name from the conversation
     items_requested, company_name_override = extract_items_for_quote(text, history)
 
     if not items_requested:
@@ -1048,12 +1147,12 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
         )
         return
 
-    # Step 2: Look up each item in Zoho
+    # 2) Match each requested product against Zoho catalog (AI-powered)
     line_items: list[dict] = []
     not_found: list[str] = []
     for req in items_requested:
         zoho_item = zoho_search_item_for_quote(req["product"])
-        if zoho_item:
+        if zoho_item and zoho_item.get("item_id"):
             line_items.append({**zoho_item, "quantity": max(1, int(req.get("quantity", 1)))})
         else:
             not_found.append(req["product"])
@@ -1069,14 +1168,19 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
         )
         return
 
-    # Step 3: Create the Zoho estimate
-    # Use company name from message if provided, otherwise use WhatsApp display name
+    # 3) Pick customer name: explicit override from message > stored meta name > WhatsApp display name
+    meta = get_conv_meta(state, from_number)
     if company_name_override and len(company_name_override) > 1:
         customer_name = company_name_override
+    elif from_name and from_name != from_number:
+        customer_name = from_name
+    elif meta.get("name"):
+        customer_name = meta["name"]
     else:
-        customer_name = from_name if from_name and from_name != from_number else "Cliente WhatsApp"
-    estimate = zoho_create_estimate(customer_name, from_number, line_items)
+        customer_name = "Cliente WhatsApp"
 
+    # 4) Create the Zoho estimate (creates contact if needed, default city SPS)
+    estimate = zoho_create_estimate(customer_name, from_number, line_items)
     if not estimate:
         wa_send(
             from_number,
@@ -1089,13 +1193,14 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
     est_id     = estimate.get("estimate_id", "")
     total      = estimate.get("total", 0.0)
 
-    # Step 4: Build and send summary message
+    # 5) Send summary + PDF
     lines_txt = "\n".join(
         f"  • {li['quantity']} x {li['name']} — L{li['rate'] * li['quantity'] * 1.15:,.2f} c/ISV"
         for li in line_items
     )
     summary = (
-        f"✅ *Cotización #{est_number}*\n\n"
+        f"✅ *Cotización #{est_number}*\n"
+        f"A nombre de: {customer_name}\n\n"
         f"{lines_txt}\n\n"
         f"*Total (ISV incluido):* L{total:,.2f}\n\n"
         f"📄 Enviando el PDF ahora..."
@@ -1104,24 +1209,28 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
         summary += f"\n\n⚠️ No encontramos en catálogo: {', '.join(not_found)}. Contáctenos para agregarlos."
     wa_send(from_number, summary)
 
-    # Step 5: Send PDF
     pdf_bytes = zoho_get_estimate_pdf(est_id)
     if pdf_bytes:
-        wa_send_document(from_number, pdf_bytes, f"Cotizacion_SUMIN_{est_number}.pdf", f"Cotización #{est_number} — SUMIN")
+        wa_send_document(from_number, pdf_bytes,
+                         f"Cotizacion_SUMIN_{est_number}.pdf",
+                         f"Cotización #{est_number} — SUMIN")
     else:
-        wa_send(from_number, f"(No se pudo generar el PDF automáticamente. Su cotización #{est_number} está registrada en nuestro sistema.)")
+        wa_send(from_number,
+                f"(No se pudo generar el PDF automáticamente. "
+                f"Su cotización #{est_number} está registrada en nuestro sistema.)")
 
-    # Step 6: Update conversation history
-    meta = get_conv_meta(state, from_number)
+    # 6) Update conversation history
     if from_name and from_name != from_number:
         meta["name"] = from_name
     meta["last_active"] = datetime.now().isoformat()
     meta["last_msg"] = text[:80]
     history.append({"role": "user", "content": text})
-    history.append({"role": "assistant", "content": f"[Cotización #{est_number} generada. Total: L{total:,.2f}]"})
+    history.append({"role": "assistant",
+                    "content": f"[Cotización #{est_number} generada para {customer_name}. Total: L{total:,.2f}]"})
     state["conversations"][from_number] = history[-20:]
     save_state(state)
-    log_action("QuoteAgent", "done", f"Estimate #{est_number} → {from_name} total=L{total:,.2f}")
+    log_action("QuoteAgent", "done",
+               f"Estimate #{est_number} → {customer_name} total=L{total:,.2f}")
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -1129,7 +1238,6 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
 # ════════════════════════════════════════════════════════════════════════════════
 
 def orchestrate(message_data: dict):
-    """Main dispatcher — routes directly to SUMIN agents (no multi-business routing)."""
     time.sleep(10)
 
     state     = load_state()
@@ -1139,46 +1247,34 @@ def orchestrate(message_data: dict):
 
     log_action("Orchestrator", "received", f"from={from_name} type={msg_type}")
 
-    # FulfillmentAgent always takes priority (Oficina SPS messages)
     if fulfillment_agent(message_data, state):
         return
 
-    # ── IMAGE HANDLING ────────────────────────────────────────────────────────
     if msg_type == "image":
         media_id  = message_data.get("image", {}).get("id", "")
         mime_type = message_data.get("image", {}).get("mime_type", "image/jpeg")
         vision_agent(from_number, from_name, media_id, mime_type, state)
         return
 
-    # ── TEXT HANDLING ─────────────────────────────────────────────────────────
     if msg_type == "text":
         text = message_data.get("text", {}).get("body", "")
 
-        # Skip Zoho codes
         if re.fullmatch(r"[a-zA-Z]{2,5}\d{4,8}", text.strip()):
             log_action("Orchestrator", "skipped_zoho_code", text)
             return
 
-        # Check for formal quote request → quote_agent generates Zoho estimate + PDF
         if detect_quote_request(text):
             quote_agent(from_number, from_name, text, state)
             return
 
-        # Check for photo request — send images before/alongside text response
         photo_key = detect_photo_request(text)
         if photo_key:
             if "electrodo" in text.lower() or any(e in text.lower() for e in ["6010","6011","6013","7018","7024","tungsteno","inox"]):
-                # Electrode photos → redirect to phone
                 wa_send(from_number, f"Para fotos de electrodos puede comunicarse al {ELECTRODE_REDIRECT_PHONE} 📞")
                 return
             photos_sent = send_product_photos(from_number, photo_key)
-            # Inject context so Claude knows whether photos were actually sent
             photo_ctx = "\n\n[FOTOS_DISPONIBLES]" if photos_sent else "\n\n[FOTOS_NO_DISPONIBLES]"
-            # Always let sales_agent respond with text (with correct photo context)
-            _orig_system = SUMIN_SYSTEM
-            # Temporarily patch: pass photo context via a wrapper
             zoho_ctx = zoho_inventory_context(text)
-            system_with_ctx = SUMIN_SYSTEM + zoho_ctx + photo_ctx
             if from_number not in state["conversations"]:
                 state["conversations"][from_number] = []
             meta = get_conv_meta(state, from_number)
@@ -1187,7 +1283,12 @@ def orchestrate(message_data: dict):
             meta["last_active"] = datetime.now().isoformat()
             meta["last_msg"] = text[:80]
             history = state["conversations"][from_number]
+            _update_city_from_text(meta, text, history)
+            city_ctx = _build_city_context(meta)
+            system_with_ctx = SUMIN_SYSTEM + city_ctx + zoho_ctx + photo_ctx
             response = claude_respond(system_with_ctx, history, text)
+            if not meta.get("ciudad") and bot_asked_city(response):
+                meta["city_asked"] = True
             history.append({"role": "user", "content": text})
             history.append({"role": "assistant", "content": response})
             state["conversations"][from_number] = history[-20:]
@@ -1199,7 +1300,6 @@ def orchestrate(message_data: dict):
         sales_agent(from_number, from_name, text, state)
         return
 
-    # ── DOCUMENT HANDLING ────────────────────────────────────────────────────
     elif msg_type == "document":
         doc      = message_data.get("document", {})
         filename = doc.get("filename", "")
@@ -1239,7 +1339,6 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
 
 # ─── DASHBOARD ───────────────────────────────────────────────────────────────
 def _fmt_dashboard_time(iso: str) -> str:
-    """Format ISO timestamp for dashboard display."""
     if not iso:
         return ""
     try:
@@ -1265,7 +1364,6 @@ async def dashboard():
     conversations = state.get("conversations", {})
     conv_meta     = state.get("conv_meta", {})
 
-    # Build contact list sorted by most recent activity
     sorted_phones = sorted(
         conversations.keys(),
         key=lambda p: conv_meta.get(p, {}).get("last_active", ""),
@@ -1284,7 +1382,6 @@ async def dashboard():
             prefix = "🤖 " if last_msg["role"] == "assistant" else "👤 "
             preview_raw = prefix + last_msg["content"][:55]
         preview = html_lib.escape(preview_raw)
-        initials = ""
         raw_name = meta.get("name", phone)
         parts = raw_name.split()
         initials = (parts[0][0] + (parts[1][0] if len(parts) > 1 else "")).upper()
@@ -1298,10 +1395,9 @@ async def dashboard():
   <div class='ci-time'>{last}</div>
 </div>"""
 
-    # Log rows
     log_colors = {"SalesAgent":"#25d366","VisionAgent":"#2196F3","PaymentAgent":"#FF9800",
                   "FulfillmentAgent":"#9C27B0","Orchestrator":"#607D8B","WA_SEND":"#00BCD4",
-                  "ZohoAPI":"#ff7043","PhotoAgent":"#ab47bc","Webhook":"#795548"}
+                  "ZohoAPI":"#ff7043","PhotoAgent":"#ab47bc","Webhook":"#795548","QuoteAgent":"#ffca28"}
     logs_html = ""
     for entry in reversed(logs[-80:]):
         color = log_colors.get(entry["agent"], "#999")
@@ -1327,7 +1423,6 @@ body{{font-family:-apple-system,Segoe UI,sans-serif;background:#111b21;color:#e9
 #hdr h1{{font-size:17px;color:#00a884;font-weight:700}}
 .hstats{{display:flex;gap:18px;font-size:13px;color:#8696a0}}
 #main{{display:flex;flex:1;overflow:hidden}}
-/* SIDEBAR */
 #sidebar{{width:360px;min-width:260px;background:#111b21;border-right:1px solid #2a3942;display:flex;flex-direction:column;overflow:hidden}}
 #sb-hdr{{background:#202c33;padding:12px 16px;font-size:12px;color:#8696a0;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #2a3942}}
 #contact-list{{flex:1;overflow-y:auto}}
@@ -1338,7 +1433,6 @@ body{{font-family:-apple-system,Segoe UI,sans-serif;background:#111b21;color:#e9
 .ci-name{{font-size:15px;font-weight:500;color:#e9edef;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 .ci-prev{{font-size:13px;color:#8696a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}}
 .ci-time{{font-size:11px;color:#8696a0;flex-shrink:0;margin-left:8px}}
-/* CHAT PANEL */
 #chat{{flex:1;display:flex;flex-direction:column;background:#0b141a;overflow:hidden}}
 #chat-hdr{{background:#202c33;padding:11px 18px;display:flex;align-items:center;border-bottom:1px solid #2a3942;flex-shrink:0;min-height:62px}}
 #chat-hdr .av2{{width:40px;height:40px;border-radius:50%;background:#00a884;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;margin-right:12px;flex-shrink:0}}
@@ -1352,7 +1446,6 @@ body{{font-family:-apple-system,Segoe UI,sans-serif;background:#111b21;color:#e9
 .msg.u .rl{{text-align:right;color:#a8d5c2}}
 .msg.b .rl{{color:#8696a0}}
 #empty{{display:flex;align-items:center;justify-content:center;flex:1;flex-direction:column;gap:12px;color:#8696a0;font-size:14px}}
-/* LOG */
 #log-bar{{background:#202c33;padding:8px 16px;cursor:pointer;color:#8696a0;font-size:12px;text-align:center;border-top:1px solid #2a3942;flex-shrink:0}}
 #log-bar:hover{{color:#e9edef}}
 #log-panel{{background:#111b21;overflow:hidden;max-height:0;transition:max-height .3s;flex-shrink:0}}
@@ -1419,10 +1512,8 @@ function show(phone){{
   const pid=phone.replace(/\\+/g,'').replace(/ /g,'');
   document.getElementById('c'+pid)?.classList.add('active');
 }}
-// Auto-select first
 const phones=Object.keys(C);
 if(phones.length>0)setTimeout(()=>show(phones[0]),50);
-// Reload page every 30s preserving selection
 setTimeout(()=>{{const u=new URL(location.href);if(cur)u.searchParams.set('sel',cur);location.href=u;}},30000);
 const sel=new URLSearchParams(location.search).get('sel');
 if(sel&&C[sel])setTimeout(()=>show(sel),60);
@@ -1431,8 +1522,8 @@ if(sel&&C[sel])setTimeout(()=>show(sel),60);
 
 @app.get("/zoho-auth")
 async def zoho_auth():
-    """Redirect to Zoho OAuth page to authorize the bot."""
-    scope = "ZohoBooks.items.READ"
+    """Redirect to Zoho OAuth authorizing items + contacts + estimates."""
+    scope = "ZohoBooks.items.READ,ZohoBooks.contacts.CREATE,ZohoBooks.contacts.READ,ZohoBooks.estimates.CREATE,ZohoBooks.estimates.READ"
     url = (
         f"https://accounts.zoho.com/oauth/v2/auth"
         f"?scope={scope}"
@@ -1440,17 +1531,17 @@ async def zoho_auth():
         f"&response_type=code"
         f"&redirect_uri={ZOHO_REDIRECT_URI}"
         f"&access_type=offline"
+        f"&prompt=consent"
     )
     return Response(
         content=f'<html><body><h2>Autorizar Zoho Books</h2>'
                 f'<p><a href="{url}" style="font-size:20px">👉 Haz clic aquí para autorizar</a></p>'
-                f'<p>Esto abrirá Zoho para que apruebes el acceso al inventario.</p></body></html>',
+                f'<p>Se pedirán permisos para: items (leer), contactos (leer/crear), cotizaciones (leer/crear).</p></body></html>',
         media_type="text/html"
     )
 
 @app.get("/zoho-callback")
 async def zoho_callback(request: Request):
-    """Exchange authorization code for refresh token."""
     code = dict(request.query_params).get("code", "")
     if not code:
         return Response("<html><body><h2>❌ No se recibió código de autorización.</h2></body></html>",
@@ -1469,7 +1560,6 @@ async def zoho_callback(request: Request):
         )
         data = r.json()
         refresh = data.get("refresh_token", "")
-        access  = data.get("access_token", "")
         if refresh:
             log_action("ZohoAPI", "oauth_success", "Refresh token obtained")
             return Response(
@@ -1480,7 +1570,7 @@ async def zoho_callback(request: Request):
                 <br><br>
                 <p>📋 Agrega este valor en Render como variable de entorno:</p>
                 <code style="background:#eee;padding:5px">ZOHO_REFRESH_TOKEN = {refresh}</code>
-                <br><br><p style="color:green">El bot ahora puede consultar el inventario de Zoho Books en tiempo real.</p>
+                <br><br><p style="color:green">El bot ahora puede consultar inventario, crear contactos y generar cotizaciones en Zoho Books.</p>
                 </body></html>""",
                 media_type="text/html"
             )
