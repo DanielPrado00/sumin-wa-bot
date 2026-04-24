@@ -130,28 +130,28 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    - NI-99 de 5/32: L123.00/lb | caja 10 lbs: L1,230.00
    Da estos precios directamente. SÍ manejamos NI-55 y NI-99 para hierro colado.
 
-   ELECTRODOS ALUMINIO (precio POR UNIDAD, con ISV):
-   - E4043 azul de 3/32 A.A.: L678.50/und | de 1/8 azul: L563.50/und
-   - Blanco de 1/8: L782.00/und | blanco de 3/32: L782.00/und
-   Nota: los de aluminio SÍ se cotizan por unidad individual (no por caja/libra).
+   ELECTRODOS ALUMINIO (TODOS POR LIBRA, con ISV — mínimo 1/4 lb):
+   - Manejamos: E4043 azul (3/32, 1/8) y Blanco (3/32, 1/8).
+   - NO inventes precio de memoria. Usa [INVENTARIO ZOHO] si está disponible en el contexto.
+     Si no, responde: "Déjeme confirmarle el precio actualizado — comuníquese al +504 3334-0477
+     o dígame cuántas libras necesita y le preparo cotización formal."
+   - Si el cliente pide "por unidad" / "suelto": ofrecer 1/4 de libra como mínimo.
 
-   REVESTIMIENTOS DUROS (la mayoría POR UNIDAD, con ISV — OJO CON EVERWEAR 800):
-   - E-300 de 1/8: L178.25/und | de 5/32: L178.25/und
-   - E-700 W.A. de 1/8: L129.95/und | de 5/32: L129.95/und
-   - American Sugar A.A. de 1/8: L143.75/und | de 5/32: L143.75/und
-   - American Hard Plus de 5/32: L483.00/und
-   - Chrome Carb TH60 de 1/8: L228.85/und | de 5/32: L228.85/und
-   - E-8018-B2 de 1/8: L241.50/und | E-9018-B3 de 1/8: L241.50/und
-   - E-11018 de 1/8: L241.50/und | E-12018M de 1/8: L241.50/und
+   REVESTIMIENTOS DUROS y ELECTRODOS ESPECIALES (TODOS POR LIBRA, con ISV — mínimo 1/4 lb):
+   - Manejamos: E-300, E-700, American Sugar, American Hard Plus, Chrome Carb TH60,
+     E-8018-B2, E-9018-B3, E-11018, E-12018M, Everwear 800.
+   - NO inventes precio de memoria. Usa [INVENTARIO ZOHO] si está disponible en el contexto.
+     Si no, responde: "Déjeme confirmarle el precio actualizado — comuníquese al +504 3334-0477
+     o dígame cuántas libras necesita y le preparo cotización formal."
+   - Si el cliente pide "por unidad" / "suelto": ofrecer 1/4 de libra como mínimo.
 
-   ⚠️ EVERWEAR 800 — EXCEPCIÓN, se vende POR LIBRA (NO por unidad):
-   - Everwear 800 de 1/8: L178.25/lb
-   - Everwear 800 de 5/32: L178.25/lb
-   - Mínimo 1/4 de libra. 1/4 de lb = L44.56 (con ISV incluido).
-   - Si el cliente pide "1 Everwear 800" o "por unidad": responder:
-     "El Everwear 800 se vende por libra, no por unidad. La libra está a L178.25
-      y el mínimo es 1/4 de lb = L44.56 con ISV. ¿Le parece bien 1/4 de libra?"
-   - Si pregunta cuántos electrodos trae la libra: redirigir al +504 3334-0477.
+   ━━━ REGLA UNIVERSAL DE UNIDADES DE ELECTRODOS (MUY IMPORTANTE) ━━━
+   NINGÚN electrodo de soldadura se vende por unidad — TODOS son POR LIBRA.
+   ÚNICA EXCEPCIÓN: electrodos de TUNGSTENO para TIG (rodillos individuales) — esos SÍ por unidad.
+   Si el cliente pregunta "cuánto cuesta X por unidad" o "un electrodo de X":
+     → Responder que se vende por libra y ofrecer 1/4 de lb como mínimo.
+     → NUNCA dar un precio por unidad (excepto tungsteno TIG).
+   Si el cliente pregunta cuántos electrodos trae la libra: redirigir al +504 3334-0477.
 
    Si el cliente pide FOTO de electrodos → "Para fotos y detalles técnicos de electrodos puede comunicarse al +504 3334-0477"
 
@@ -785,6 +785,14 @@ def zoho_inventory_context(text: str) -> str:
         "ni-99", "ni99", "ni-55", "ni55", "308", "309", "316",
         "antorcha", "regulador", "boquilla", "tobera", "difusor",
         "kit", "equipo", "victor", "safecut", "respirador",
+        # Revestimientos duros y electrodos especiales (ampliado para que
+        # frases cortas tipo "y el hard plus" disparen consulta a Zoho y
+        # no respondan solo desde el prompt hardcodeado)
+        "hard plus", "hardplus", "american hard", "american sugar",
+        "chrome carb", "chromecarb", "everwear", "ever wear",
+        "e-300", "e300", "e-700", "e700",
+        "8018", "9018", "11018", "12018",
+        "tungsteno",
     ]
     if not any(w in text.lower() for w in inquiry_words):
         return ""
