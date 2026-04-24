@@ -775,32 +775,98 @@ def match_product_to_catalog(client_query: str, catalog: list,
         log_action("ZohoAPI", "match_error", str(e))
         return None
 
-def zoho_inventory_context(text: str) -> str:
-    inquiry_words = [
-        "tienen", "hay", "disponible", "stock", "venden", "manejan",
-        "precio", "cuánto", "cuanto", "cuesta", "vale", "busco", "necesito",
-        "electrodo", "alambre", "careta", "guante", "chaqueta", "delantal",
-        "6011", "6013", "6010", "7018", "7024", "mig", "tig", "oxicorte",
-        "disco", "lija", "esmeril", "varilla", "aluminio", "inoxidable",
-        "ni-99", "ni99", "ni-55", "ni55", "308", "309", "316",
-        "antorcha", "regulador", "boquilla", "tobera", "difusor",
-        "kit", "equipo", "victor", "safecut", "respirador",
-        # Revestimientos duros y electrodos especiales (ampliado para que
-        # frases cortas tipo "y el hard plus" disparen consulta a Zoho y
-        # no respondan solo desde el prompt hardcodeado)
-        "hard plus", "hardplus", "american hard", "american sugar",
-        "chrome carb", "chromecarb", "everwear", "ever wear",
-        "e-300", "e300", "e-700", "e700",
-        "8018", "9018", "11018", "12018",
-        "tungsteno",
-    ]
-    if not any(w in text.lower() for w in inquiry_words):
+_INQUIRY_WORDS = [
+    "tienen", "hay", "disponible", "stock", "venden", "manejan",
+    "precio", "cuánto", "cuanto", "cuesta", "vale", "busco", "necesito",
+    "electrodo", "alambre", "careta", "guante", "chaqueta", "delantal",
+    "6011", "6013", "6010", "7018", "7024", "mig", "tig", "oxicorte",
+    "disco", "lija", "esmeril", "varilla", "aluminio", "inoxidable",
+    "ni-99", "ni99", "ni-55", "ni55", "308", "309", "316",
+    "antorcha", "regulador", "boquilla", "tobera", "difusor",
+    "kit", "equipo", "victor", "safecut", "respirador",
+    # Revestimientos duros y electrodos especiales
+    "hard plus", "hardplus", "american hard", "american sugar",
+    "chrome carb", "chromecarb", "everwear", "ever wear",
+    "e-300", "e300", "e-700", "e700",
+    "8018", "9018", "11018", "12018",
+    "tungsteno",
+]
+
+# Patterns that indicate the customer is giving a detail (diameter, quantity)
+# that only makes sense in context of a previous product mention.
+_CONTEXTUAL_FOLLOWUP_PATTERNS = [
+    r"^\s*\d+\s*/\s*\d+\s*$",                          # "1/8", "5/32", "3 / 32"
+    r"^\s*\d+\s*(lbs?|libras?|libra|kg|kilos?)\s*$",   # "10 lbs", "5 libras"
+    r"^\s*\d+\s*$",                                    # "10", "100" (a veces cantidad)
+    r"^\s*(de\s+|el\s+|la\s+)?\d+\s*/\s*\d+\b.*",     # "de 5/32", "el 1/8 porfa"
+]
+
+
+def _looks_like_contextual_followup(text: str) -> bool:
+    """Heuristic: short message that only makes sense in context of a prior
+    product mention (e.g. customer replying '5/32' after bot asked diameter)."""
+    t = (text or "").strip().lower()
+    if len(t) > 40 or not t:
+        return False
+    for pat in _CONTEXTUAL_FOLLOWUP_PATTERNS:
+        if re.match(pat, t):
+            return True
+    return False
+
+
+def _last_product_hint_from_history(history: list) -> str:
+    """Scan the last few messages (both client and bot) for product keywords.
+    Returns a snippet around the product mention, or '' if none found."""
+    if not history:
         return ""
+    # Look at the last 6 messages, newest first
+    recent = list(history[-6:])
+    recent.reverse()
+    for msg in recent:
+        content = (msg.get("content") or "").lower()
+        if not content:
+            continue
+        for kw in _INQUIRY_WORDS:
+            if kw in content:
+                # Return a bounded snippet (max 120 chars) for the matcher
+                return content[:120]
+    return ""
+
+
+def zoho_inventory_context(text: str, history: list | None = None) -> str:
+    """Build a [INVENTARIO ZOHO] snippet to inject into the system prompt.
+
+    Priority:
+      1. If `text` itself mentions a product/inquiry keyword → search Zoho for `text`.
+      2. If `text` is a short contextual follow-up (e.g. just '5/32' or '10 lbs')
+         AND the recent history mentions a product → combine history hint + text
+         and search Zoho for that combined query. This fixes the case where the
+         bot asked 'qué diámetro?' and the customer replied only '5/32', losing
+         the product context.
+      3. Otherwise → return '' (no Zoho context needed).
+    """
+    history = history or []
+    text_lower = (text or "").lower()
+    has_inquiry = any(w in text_lower for w in _INQUIRY_WORDS)
+
+    query = ""
+    if has_inquiry:
+        query = text
+    elif _looks_like_contextual_followup(text):
+        hint = _last_product_hint_from_history(history)
+        if hint:
+            query = f"{hint} {text}".strip()
+            log_action("ZohoAPI", "contextual_lookup",
+                       f"followup='{text}' hint='{hint[:60]}'")
+
+    if not query:
+        return ""
+
     try:
         catalog = fetch_zoho_catalog()
         if not catalog:
             return ""
-        matched = match_product_to_catalog(text, catalog)
+        matched = match_product_to_catalog(query, catalog)
         if matched:
             item_name = matched.get("item_name", "")
             sku       = matched.get("sku", "")
@@ -865,7 +931,7 @@ def sales_agent(from_number: str, from_name: str, text: str, state: dict):
 
     _update_city_from_text(meta, text, history)
     city_ctx = _build_city_context(meta)
-    zoho_ctx = zoho_inventory_context(text)
+    zoho_ctx = zoho_inventory_context(text, history=history)
     system = SUMIN_SYSTEM + city_ctx + zoho_ctx
     response = claude_respond(system, history, text)
 
@@ -1417,7 +1483,6 @@ def orchestrate(message_data: dict):
                 return
             photos_sent = send_product_photos(from_number, photo_key)
             photo_ctx = "\n\n[FOTOS_DISPONIBLES]" if photos_sent else "\n\n[FOTOS_NO_DISPONIBLES]"
-            zoho_ctx = zoho_inventory_context(text)
             if from_number not in state["conversations"]:
                 state["conversations"][from_number] = []
             meta = get_conv_meta(state, from_number)
@@ -1428,6 +1493,7 @@ def orchestrate(message_data: dict):
             history = state["conversations"][from_number]
             _update_city_from_text(meta, text, history)
             city_ctx = _build_city_context(meta)
+            zoho_ctx = zoho_inventory_context(text, history=history)
             system_with_ctx = SUMIN_SYSTEM + city_ctx + zoho_ctx + photo_ctx
             response = claude_respond(system_with_ctx, history, text)
             if not meta.get("ciudad") and bot_asked_city(response):
