@@ -24,8 +24,11 @@ ZOHO_ORG_ID        = os.environ.get("ZOHO_ORG_ID", "")
 ZOHO_REFRESH_TOKEN = os.environ.get("ZOHO_REFRESH_TOKEN", "")
 ZOHO_REDIRECT_URI  = "https://sumin-wa-bot.onrender.com/zoho-callback"
 
-# GitHub token for downloading private repo images
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "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")
+# GitHub token for downloading private repo images — MUST be provided via env var.
+# Never commit a default token value: a default in public code is equivalent to a leak.
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+if not GITHUB_TOKEN:
+    print("[WARN] GITHUB_TOKEN not set — product image downloads from private repos will fail.")
 
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
@@ -677,24 +680,75 @@ def fetch_zoho_catalog() -> list:
         log_action("ZohoAPI", "catalog_error", str(e))
         return _zoho_catalog_cache["items"]
 
-def match_product_to_catalog(client_query: str, catalog: list) -> dict | None:
+def _normalize_unit(u: str) -> str:
+    """Normalize unit strings so 'lb', 'lbs', 'LIBRA' all map to 'LB', etc."""
+    if not u:
+        return ""
+    s = u.strip().upper().rstrip(".")
+    if s in {"LB", "LBS", "LIBRA", "LIBRAS", "POUND", "POUNDS"}:
+        return "LB"
+    if s in {"UND", "UNID", "UNIDAD", "UNIDADES", "PZA", "PIEZA", "U"}:
+        return "UND"
+    if s in {"CAJA", "CJ", "BOX"}:
+        return "CAJA"
+    if s in {"ROLLO", "ROLL"}:
+        return "ROLLO"
+    if s in {"KG", "KILO", "KILOS", "KILOGRAMO"}:
+        return "KG"
+    return s
+
+
+def match_product_to_catalog(client_query: str, catalog: list,
+                             requested_unit: str = "") -> dict | None:
+    """Pick the best-matching Zoho item for a free-text product description.
+
+    If `requested_unit` is given (e.g. "LB" after the client said "libras"), we
+    restrict the catalog shown to Claude to items with that unit. This is what
+    prevents the classic bug of cotizing a product-sold-by-LB as
+    product-by-UND (e.g. welding electrodes).
+    """
     if not catalog:
         return None
+
+    req_unit = _normalize_unit(requested_unit)
+
+    # 1) Filter by requested unit when we have one. If nothing matches, fall
+    #    back to the full catalog so we don't silently return None.
+    filtered = catalog
+    if req_unit:
+        narrowed = [it for it in catalog
+                    if _normalize_unit(it.get("unit", "")) == req_unit]
+        if narrowed:
+            filtered = narrowed
+
+    # 2) Build catalog text — INCLUDING the unit field so the LLM can see it
+    #    and disambiguate SKUs that differ only by unit of measure.
     catalog_lines = []
-    for item in catalog:
+    for item in filtered:
         name = item.get("item_name", "")
         sku  = item.get("sku", "")
         rate = item.get("rate", 0)
+        unit = item.get("unit", "")
         if name:
-            catalog_lines.append(f"SKU:{sku} | {name} | L.{rate}")
+            catalog_lines.append(f"SKU:{sku} | {name} | unit:{unit} | L.{rate}")
     catalog_text = "\n".join(catalog_lines[:350])
+
+    unit_hint = ""
+    if req_unit:
+        unit_hint = (
+            f"\n\nIMPORTANTE: el cliente pidió la cantidad en {req_unit}. "
+            f"Prefiere SIEMPRE un ítem cuya columna unit sea {req_unit}. "
+            f"NO elijas un ítem con otra unidad (por ejemplo, nunca UND si el cliente pidió LB)."
+        )
+
     try:
         response = claude.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=60,
             messages=[{"role": "user", "content":
                 f"El cliente pregunta por: \"{client_query}\"\n\n"
-                f"Catálogo de productos disponibles:\n{catalog_text}\n\n"
+                f"Catálogo de productos disponibles (una línea por SKU):\n{catalog_text}"
+                f"{unit_hint}\n\n"
                 f"¿Cuál es el SKU del producto que mejor coincide con lo que pide el cliente?\n"
                 f"Responde SOLO el SKU exacto del producto, sin explicaciones. "
                 f"Si no hay match claro, responde NINGUNO."}]
@@ -702,8 +756,16 @@ def match_product_to_catalog(client_query: str, catalog: list) -> dict | None:
         if not response or response.upper() == "NINGUNO":
             return None
         sku_clean = response.strip()
+
+        # 3) Resolve SKU → item, preferring the filtered (unit-matching) set
+        for item in filtered:
+            if item.get("sku", "").strip() == sku_clean:
+                return item
         for item in catalog:
             if item.get("sku", "").strip() == sku_clean:
+                return item
+        for item in filtered:
+            if sku_clean in item.get("sku", "") or item.get("sku", "") in sku_clean:
                 return item
         for item in catalog:
             if sku_clean in item.get("sku", "") or item.get("sku", "") in sku_clean:
@@ -895,7 +957,11 @@ def detect_quote_request(text: str) -> bool:
 
 
 def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
-    """Extract products, quantities, and customer/company name from conversation."""
+    """Extract products, quantities, unit of measure, and customer/company name.
+
+    Each item returned has shape: {"product": str, "quantity": float, "unit": str}
+    where unit ∈ {"LB","UND","CAJA","ROLLO","KG",""} ("" = cliente no lo especificó).
+    """
     recent_ctx = ""
     for m in history[-8:]:
         role = "Cliente" if m["role"] == "user" else "Bot"
@@ -905,15 +971,25 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
         "Analiza la conversación y extrae:\n"
         "1. Los PRODUCTOS que el cliente quiere cotizar (busca en TODO el historial, no solo el último mensaje)\n"
         "2. Las CANTIDADES de cada producto\n"
-        "3. El NOMBRE o EMPRESA para la cotización (si el cliente dijo 'a nombre de X' o 'para la empresa X')\n\n"
-        "IMPORTANTE:\n"
+        "3. La UNIDAD DE MEDIDA que pide el cliente para cada producto\n"
+        "4. El NOMBRE o EMPRESA para la cotización (si el cliente dijo 'a nombre de X' o 'para la empresa X')\n\n"
+        "REGLAS PARA LA UNIDAD (campo `unit`):\n"
+        "- 'libra', 'libras', 'lb', 'lbs', 'pound' → \"LB\"\n"
+        "- 'unidad', 'unidades', 'und', 'suelto', 'por electrodo', 'pieza', 'pza' → \"UND\"\n"
+        "- 'caja', 'cajas' → \"CAJA\"\n"
+        "- 'rollo', 'rollos' → \"ROLLO\"\n"
+        "- 'kilo', 'kilos', 'kg' → \"KG\"\n"
+        "- Si el cliente NO especificó la unidad, devuelve \"\" (string vacío).\n"
+        "- NUNCA inventes la unidad — si hay duda, devuelve \"\".\n"
+        "- Los ELECTRODOS de soldadura (6010, 6011, 6013, 7018, 7024, E308, E309, E316, Everwear, NI-55, NI-99, etc.) se venden por LIBRA por defecto. Solo los electrodos de TUNGSTENO (TIG) se venden por UND.\n\n"
+        "OTRAS REGLAS:\n"
         "- Un nombre de empresa (como 'Proenco', 'ACSA', etc.) NO es un producto — es el destinatario.\n"
         "- Si el cliente dijo 'de 10' o 'quiero 10', es la cantidad del producto mencionado antes.\n"
         "- Busca productos en TODO el historial, no solo en el último mensaje.\n\n"
         f"Conversación reciente:\n{recent_ctx}\n"
         f"Mensaje actual: {text}\n\n"
         "Responde SOLO con JSON válido en este formato:\n"
-        '{"items": [{"product": "electrodo 6010 1/8", "quantity": 10}], "customer_name": "Proenco"}\n'
+        '{"items": [{"product": "electrodo 6010 1/8", "quantity": 10, "unit": "LB"}], "customer_name": "Proenco"}\n'
         'Si no hay productos claros: {"items": [], "customer_name": ""}'
     )
     try:
@@ -927,6 +1003,20 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
         if match:
             parsed = json.loads(match.group())
             items = parsed.get("items", [])
+            # Backfill: if Haiku forgot the unit but the product looks like an
+            # electrode, default to LB (welding electrodes are always LB unless
+            # tungsten). Tungsten → UND.
+            for it in items:
+                if not it.get("unit"):
+                    pname = (it.get("product") or "").lower()
+                    if "tungsteno" in pname or "tig" in pname:
+                        it["unit"] = "UND"
+                    elif any(k in pname for k in (
+                        "electrodo", "6010", "6011", "6013", "7018", "7024",
+                        "everwear", "ni-55", "ni55", "ni-99", "ni99",
+                        "e308", "e309", "e316", "e310", "e312",
+                    )):
+                        it["unit"] = "LB"
             customer_name = parsed.get("customer_name", "")
             return items, customer_name
     except Exception as e:
@@ -934,12 +1024,21 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
     return [], ""
 
 
-def zoho_search_item_for_quote(product_name: str) -> dict | None:
+def zoho_search_item_for_quote(product_name: str,
+                               requested_unit: str = "") -> dict | None:
     """Match a natural-language product description against the full Zoho catalog using AI.
-    Falls back to raw search_text if the AI matcher returns nothing."""
+
+    `requested_unit` (e.g. "LB", "UND") is passed down to the matcher so that
+    items with a different unit of measure are excluded. This is the core fix
+    for the lbs-vs-unidades bug.
+
+    Falls back to raw search_text + unit filter if the AI matcher returns nothing.
+    """
+    req_unit = _normalize_unit(requested_unit)
     catalog = fetch_zoho_catalog()
     if catalog:
-        matched = match_product_to_catalog(product_name, catalog)
+        matched = match_product_to_catalog(product_name, catalog,
+                                           requested_unit=req_unit)
         if matched:
             return {
                 "item_id": matched.get("item_id", ""),
@@ -947,7 +1046,7 @@ def zoho_search_item_for_quote(product_name: str) -> dict | None:
                 "rate":    matched.get("rate", 0.0),
                 "unit":    matched.get("unit", ""),
             }
-    # Fallback: direct Zoho search
+    # Fallback: direct Zoho search, then filter client-side by unit if given
     token = get_zoho_access_token()
     if not token or not ZOHO_ORG_ID:
         return None
@@ -959,6 +1058,11 @@ def zoho_search_item_for_quote(product_name: str) -> dict | None:
             timeout=8,
         )
         items = r.json().get("items", [])
+        if req_unit:
+            preferred = [i for i in items
+                         if _normalize_unit(i.get("unit", "")) == req_unit]
+            if preferred:
+                items = preferred
         if items:
             i = items[0]
             return {"item_id": i.get("item_id", ""), "name": i.get("item_name", ""),
@@ -1147,15 +1251,42 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
         )
         return
 
-    # 2) Match each requested product against Zoho catalog (AI-powered)
+    # 2) Match each requested product against Zoho catalog (AI-powered),
+    #    passing through the unit of measure the client asked for so we don't
+    #    accidentally match a LB-sold product against an UND SKU.
     line_items: list[dict] = []
     not_found: list[str] = []
+    unit_mismatches: list[str] = []
     for req in items_requested:
-        zoho_item = zoho_search_item_for_quote(req["product"])
+        req_unit = _normalize_unit(req.get("unit", ""))
+        zoho_item = zoho_search_item_for_quote(req["product"], requested_unit=req_unit)
         if zoho_item and zoho_item.get("item_id"):
-            line_items.append({**zoho_item, "quantity": max(1, int(req.get("quantity", 1)))})
+            matched_unit = _normalize_unit(zoho_item.get("unit", ""))
+            # Safety net: if the client said LB and the only match we could find
+            # is UND (or vice versa), DO NOT auto-quote — flag it instead. This
+            # protects us from charging, say, 100 electrodes as UND when the
+            # client wanted 100 LB.
+            if req_unit and matched_unit and req_unit != matched_unit:
+                unit_mismatches.append(
+                    f"{req['product']} (pidió {req_unit}, en catálogo solo hay {matched_unit})"
+                )
+                continue
+            line_items.append({**zoho_item,
+                               "quantity": max(1, int(req.get("quantity", 1)))})
         else:
             not_found.append(req["product"])
+
+    # If we detected unit mismatches, bail out and hand off to a human. Better
+    # to ask than to send a wrong cotización.
+    if unit_mismatches and not line_items:
+        wa_send(
+            from_number,
+            "Necesito confirmar la unidad de medida antes de cotizar:\n\n"
+            f"• {chr(10).join(unit_mismatches)}\n\n"
+            "¿Me confirma si es por libra, por unidad o por caja? "
+            f"O si prefiere, comuníquese al {ELECTRODE_REDIRECT_PHONE}.",
+        )
+        return
 
     if not line_items:
         product_list = ", ".join(r["product"] for r in items_requested)
