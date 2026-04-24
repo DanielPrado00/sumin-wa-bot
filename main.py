@@ -1338,6 +1338,10 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
     )
     if not_found:
         summary += f"\n\n⚠️ No encontramos en catálogo: {', '.join(not_found)}. Contáctenos para agregarlos."
+    if unit_mismatches:
+        summary += ("\n\n⚠️ No cotizamos por diferencia de unidad: "
+                    f"{', '.join(unit_mismatches)}. "
+                    f"Confírmenos la unidad correcta o comuníquese al {ELECTRODE_REDIRECT_PHONE}.")
     wa_send(from_number, summary)
 
     pdf_bytes = zoho_get_estimate_pdf(est_id)
