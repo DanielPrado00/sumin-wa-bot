@@ -1583,6 +1583,43 @@ _QUOTE_NONAME_WORDS = {
 }
 
 
+def _parse_quote_name_response_open(text: str) -> str:
+    """Parse customer's reply when we asked '¿A nombre de quién?' WITHOUT
+    suggesting any name. Returns the resolved customer name.
+
+    - Empty / generic affirm ("sí", "ok") → Consumidor Final
+    - "sin nombre" / "consumidor" / similar → Consumidor Final
+    - Otherwise: clean up the response and use it as the name (max 80 chars)
+    """
+    t = (text or "").strip().rstrip(".!?¡¿")
+    if not t:
+        return "Consumidor Final"
+    t_low = t.lower()
+
+    if t_low in _QUOTE_AFFIRM_WORDS or t_low in {"yes", "ok", "okay", "claro", "dale"}:
+        # The user said "yes" but we never offered a specific name. Default safe.
+        return "Consumidor Final"
+
+    if t_low in _QUOTE_NONAME_WORDS or t_low.startswith("consumidor") or t_low.startswith("sin "):
+        return "Consumidor Final"
+
+    # Strip common prefixes
+    for prefix in (
+        "a nombre de ", "a nombre del ", "para la empresa ", "para ",
+        "facturar a ", "facturar para ", "a la empresa ",
+        "cotizar a ", "cotizar para ", "es para ", "es de ",
+    ):
+        if t_low.startswith(prefix):
+            t = t[len(prefix):].strip()
+            break
+
+    # Clean up + trim
+    t = t.strip(" \"\\\'.,;:")
+    if not t:
+        return "Consumidor Final"
+    return t[:80]
+
+
 def _parse_quote_name_response(text: str, suggested: str) -> str:
     """Parse the customer's response to '¿A nombre de X o otra empresa?'.
     Returns resolved name. Defaults to 'Consumidor Final' on opt-out.
@@ -1634,8 +1671,8 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
     pending = meta.get("pending_quote") or {}
 
     if pending.get("items"):
-        suggested = pending.get("suggested", "Consumidor Final")
-        customer_name = _parse_quote_name_response(text, suggested)
+        # Open name parsing — no "suggested" fallback.
+        customer_name = _parse_quote_name_response_open(text)
         line_items = pending["items"]
         not_found = pending.get("not_found", [])
         unit_mismatches = pending.get("unit_mismatches", [])
@@ -1696,15 +1733,14 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
         if company_name_override and len(company_name_override) > 1:
             customer_name = company_name_override
         else:
-            suggested = (
-                from_name if (from_name and from_name != from_number)
-                else (meta.get("name") or "Consumidor Final")
-            )
+            # IMPORTANT: do NOT suggest the WhatsApp profile name. Many customers
+            # use nicknames, emojis or informal handles in their WhatsApp profile
+            # ("DP", "el diablito", etc.) — that should NEVER end up on a formal
+            # quote. We ask openly and default to Consumidor Final on opt-out.
             meta["pending_quote"] = {
                 "items": line_items,
                 "not_found": not_found,
                 "unit_mismatches": unit_mismatches,
-                "suggested": suggested,
                 "asked_at": datetime.now().isoformat(),
             }
             save_state(state)
@@ -1713,11 +1749,10 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                 from_number,
                 f"¡Con gusto le preparo la cotización! 📋\n\n"
                 f"Identifiqué: *{items_summary}*\n\n"
-                f"¿Le genero la cotización a nombre de *{suggested}* o a nombre de otra empresa?\n"
-                f"(Responda 'sí' para usar {suggested}, escriba el nombre de la empresa, "
-                f"o 'sin nombre' para Consumidor Final)"
+                f"¿A nombre de quién o de qué empresa le genero la cotización? "
+                f"(Si prefiere, escriba 'sin nombre' y la hago a nombre de Consumidor Final)"
             )
-            log_action("QuoteAgent", "asked_customer_name", f"suggested={suggested}")
+            log_action("QuoteAgent", "asked_customer_name_open", "")
             return
 
     estimate = zoho_create_estimate(customer_name, from_number, line_items)
