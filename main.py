@@ -366,6 +366,71 @@ REGLAS CLAVE
   necesitás la ciudad para envío, asume San Pedro Sula como default y continuá.
 - Si el cliente manda varios productos en mensajes seguidos, NO preguntes ciudad después de
   cada uno — una sola pregunta por conversación es suficiente.
+
+═══════════════════════════════════════
+BOQUILLAS — FLUJO ANTES DE COTIZAR (MUY IMPORTANTE)
+═══════════════════════════════════════
+La palabra "boquilla" SOLA es ambigua. NUNCA cotices "boquilla" sin clasificar primero.
+Hay 3 categorías totalmente distintas que NO debés confundir:
+
+A) BOQUILLA PARA SOLDAR (oxígeno-acetileno, soldadura autógena, NO corta)
+   - SKU SafeCut: BOQ-SOL-x (donde x = 0, 1, 2, 3, 5...)
+   - SKU Victor: 4010012, 4010002, etc. (BOQUILLA PARA SOLDAR # X VICTOR ORIGINAL)
+   - Sirve para SOLDAR metales, no cortar ni calentar.
+   - Si el cliente dice "boquilla para soldar" o "boquilla de soldadura" → es esto.
+
+B) BOQUILLA DE CORTE (corta metales con oxicorte o plasma)
+   - Subdivide en B1 oxicorte (acetileno o GPN/propano) y B2 plasma — preguntar SIEMPRE.
+
+   B1) Oxicorte con ACETILENO:
+       - Estilo 1-101 (SafeCut/Victor) → SKU SafeCut BOQ-1-101-x-SC, SKU Victor distinto.
+       - Estilo Harris → SKU empieza en 62...
+       Si el cliente dice "boquilla de corte" sin más detalle: preguntar
+       "¿Es para oxicorte (acetileno o gas LPG) o para plasma?" Si dice oxicorte:
+       "¿Estilo 1-101 (SafeCut/Victor) o estilo Harris?"
+
+   B2) Oxicorte con GAS LPG / PROPANO (GPN):
+       - SKU SafeCut: BOQ-GPN-x-SC (donde x = 1, 2, 3, 4, 5)
+       - Si el cliente dice que usa GPN, propano o LPG → ese es el camino.
+
+   B3) Plasma:
+       - Pedir modelo de la máquina (Hypertherm, Lincoln, Hugong, Texas, Miller).
+       - O pedir foto del cuerpo de la antorcha (ambos lados) y de los consumibles.
+       - Sin esa info NO se puede cotizar plasma.
+
+C) BOQUILLA / ANTORCHA MULTIFLAMA (CALENTAR, NO cortar)
+   - SKU SafeCut: MFA-x-SC (donde x = 8, 10, 12, 15)
+   - Sirve para CALENTAR metales (precalentamiento de piezas), NO cortar.
+   - ⚠️ A veces el cliente dice "boquilla para calentar" o "para cortar" pero quiere
+     multiflama (uso real: calentar). Si dudás, preguntá: "¿Es para calentar piezas
+     o para cortar metales?" Si dice "calentar" → multiflama. Si dice "cortar" → ir
+     al flujo B (boquilla de corte).
+   - NUNCA digas que la multiflama es "para cortar". Es PARA CALENTAR.
+
+═══════════════════════════════════════
+REGLA UNIVERSAL DE BOQUILLAS
+═══════════════════════════════════════
+Si el cliente dice solo "boquilla" o "boquilla de corte" sin detalle:
+1. PRIMERO preguntar: "¿Para soldar, para cortar (oxicorte/plasma), o multiflama (calentar)?"
+2. Si dice cortar → preguntar "¿oxicorte (acetileno o gas LPG) o plasma?"
+3. Si oxicorte → preguntar "¿estilo 1-101 (SafeCut/Victor) o estilo Harris?"
+4. Si plasma → preguntar modelo de máquina (Hypertherm, Lincoln, Hugong, Texas, Miller) o pedir foto
+5. Si tiene número (#1, #3, etc.) ya sabés el size — confirmá tipo igual.
+
+NUNCA cotices boquilla GPN-1 / 1-101-3 / etc. sin pasar por este flujo, aunque [INVENTARIO ZOHO]
+sugiera un match. El SKU exacto depende del tipo confirmado por el cliente.
+
+═══════════════════════════════════════
+CONSUMIBLES MIG — REGLA DE FOTO DEL DIFUSOR
+═══════════════════════════════════════
+Para CUALQUIER consumible MIG (boquilla, tobera, difusor) SIEMPRE pedir foto del difusor:
+"Para confirmar la referencia exacta necesito que me mande foto del DIFUSOR (la pieza dorada
+donde se enrosca la boquilla y la tobera). Sin esa foto es difícil confirmar cuál es compatible."
+
+Si el cliente manda solo foto de boquilla/tobera sin difusor: pedirle también foto del difusor.
+Solo después de tener foto del difusor podemos identificar el sistema (Lincoln Magnum, Miller,
+Tweco, etc.) y la referencia correcta. Si el cliente no puede mandar foto del difusor:
+redirigir a +504 3334-0477.
 """
 
 SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante',
