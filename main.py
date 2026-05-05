@@ -162,8 +162,9 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    CARETAS DISPONIBLES:
 
    ► OPCIÓN INDUSTRIAL (uso pesado, trabajo continuo):
-   - *Pro 4.0* — careta de alto rendimiento con sistema de purificación de aire para humos de soldadura, uso intensivo. L2,530.00
-   - *Panorámica 5.6* — lente panorámico 5.6" para máxima visibilidad, ideal para MIG y trabajos de precisión. Precio: consultar.
+   - *Pro 4.0* — careta electrónica profesional de 5 sensores, grado óptico 1/1/1/1, tecnología True View. Para soldadura intensiva. *L2,530.00* (ISV incluido). NO incluye respirador, es solo la careta.
+   - *Pro 4.0 + Respirador (Kit PAPR)* — kit completo: careta Pro 4.0 + sistema motorizado de purificación de aire para filtrar humos de soldadura. Para uso pesado donde se requiere protección respiratoria. *L13,225.00* (ISV incluido). Es la indicada cuando el operario está expuesto a humos.
+   - *Panorámica 5.6* — lente panorámico 5.6" de 5 sensores para máxima visibilidad, ideal para MIG y trabajos de precisión. *L4,370.00* (ISV incluido).
 
    ► OPCIÓN ECONÓMICA (buena calidad, precio accesible):
    - Careta electrónica de 2 sensores con controles analógicos de sombra, sensibilidad y delay.
@@ -176,8 +177,7 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    - Si el cliente dice que en otro lado la vio más barata, usa el enfoque Tactical Empathy:
      "Eso tiene sentido, hay muchas opciones en el mercado. La diferencia con esta es [VALOR ESPECÍFICO]."
    - Si el cliente no sabe qué necesita, pregunta sobre su tipo de trabajo: ¿MIG, TIG, electrodo? ¿Soldadura ocasional o diaria?
-   - Careta Panorámica (visión amplia + respirador): L4,300.00
-   - Careta PAPR (sistema motorizado, máxima protección): L13,225.00
+   (Pro 4.0, Pro 4.0 + Respirador y Panorámica 5.6 ya tienen sus precios detallados arriba.)
 
    GUANTES DE CUERO (precios con ISV incluido):
    - HEATPROTECTION-14" (corto): L552.00
@@ -242,9 +242,22 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    - Safecut: consultar tienda para detalles de garantía.
 
 7. ANTORCHAS (4 tipos que manejamos):
-   a) ANTORCHA DE OXICORTE SafeCut — Antorcha Completa CA460 + Maneral WH450FC:
-      - Precio: L6,440.00 (ISV incluido)
-      - 1 año de garantía en reguladores, antorcha y maneral
+   a) ANTORCHA DE OXICORTE SafeCut — sistema modular Antorcha CA460 + Maneral WH450:
+      - ANTORCHA SOLA (CA460): L3,220.00 (ISV incluido)
+      - MANERAL SOLO (WH450): L3,220.00 (ISV incluido)
+      - SET COMPLETO (Antorcha CA460 + Maneral WH450): L6,440.00 (ISV incluido)
+
+      ⚠ MUY IMPORTANTE — Cuando el cliente pide "antorcha completa", "kit",
+      "antorcha y maneral", "antorcha + maneral", "antorcha más maneral",
+      "set completo" o cualquier indicación de querer el conjunto: SIEMPRE
+      cotizar AMBOS items separados (Antorcha CA460 + Maneral WH450) por un
+      total de L6,440. NUNCA cotizar solo una pieza cuando el cliente pidió
+      el set.
+
+      Solo cuando el cliente pide explícitamente "solo la antorcha" o
+      "solo el maneral", cotizar la pieza individual a L3,220.
+
+      - 1 año de garantía en antorcha y maneral
       - Disponibilidad de repuestos
       - UL Listed | Certificada AWS
       - Para uso pesado e industrial
@@ -1380,83 +1393,154 @@ def wa_send_document(to: str, file_bytes: bytes, filename: str, caption: str = "
     return r.json()
 
 
+_QUOTE_AFFIRM_WORDS = {
+    "si", "sí", "yes", "ok", "okay", "dale", "correcto", "perfecto", "vale",
+    "claro", "asi", "así", "asi mismo", "así mismo", "esta bien", "está bien",
+    "confirmado", "afirmativo", "exacto", "sip", "sale", "listo",
+}
+_QUOTE_NONAME_WORDS = {
+    "no", "sin nombre", "no importa", "consumidor final", "ninguno",
+    "no tengo", "ninguna", "anonimo", "anónimo", "no aplica",
+}
+
+
+def _parse_quote_name_response(text: str, suggested: str) -> str:
+    """Parse the customer's response to '¿A nombre de X o otra empresa?'.
+    Returns resolved name. Defaults to 'Consumidor Final' on opt-out.
+    """
+    t = (text or "").lower().strip().rstrip(".!?¡¿")
+    if not t:
+        return suggested
+
+    if t in _QUOTE_AFFIRM_WORDS:
+        return suggested
+
+    suggested_lower = (suggested or "").lower()
+    if suggested_lower and t in (
+        f"a nombre de {suggested_lower}",
+        f"a nombre del {suggested_lower}",
+        f"para {suggested_lower}",
+        f"facturar a {suggested_lower}",
+    ):
+        return suggested
+
+    if t in _QUOTE_NONAME_WORDS or t.startswith("consumidor"):
+        return "Consumidor Final"
+
+    for prefix in (
+        "a nombre de ", "a nombre del ", "para ", "facturar a ",
+        "a la empresa ", "cotizar a ", "facturar para ",
+    ):
+        if t.startswith(prefix):
+            extracted = text[len(prefix):].strip().rstrip(".!?¡¿")
+            return extracted or suggested
+
+    if len(text.strip()) >= 2:
+        return text.strip().rstrip(".!?¡¿")
+
+    return suggested
+
+
 def quote_agent(from_number: str, from_name: str, text: str, state: dict):
-    """Generate a formal Zoho Books estimate + PDF and send it via WhatsApp."""
+    """Generate a Zoho estimate + PDF and send via WhatsApp.
+
+    Two-phase flow when customer hasn't named the company in their message:
+      Phase 1 — extract products, match Zoho, ASK "¿a nombre de X?".
+      Phase 2 — when customer responds with name (or 'sí' / 'sin nombre'),
+                orchestrator routes back here, we use stored items.
+    """
     log_action("QuoteAgent", "start", f"{from_name}: {text[:80]}")
     history = state["conversations"].get(from_number, [])
-
-    # 1) Extract products + optional company name from the conversation
-    items_requested, company_name_override = extract_items_for_quote(text, history)
-
-    if not items_requested:
-        wa_send(
-            from_number,
-            "¡Con gusto le preparo la cotización! 📋\n\n"
-            "Por favor indíqueme qué productos necesita y en qué cantidades. "
-            "Ejemplo: *10 cajas de electrodo 6010 1/8* o *5 caretas básicas*.",
-        )
-        return
-
-    # 2) Match each requested product against Zoho catalog (AI-powered),
-    #    passing through the unit of measure the client asked for so we don't
-    #    accidentally match a LB-sold product against an UND SKU.
-    line_items: list[dict] = []
-    not_found: list[str] = []
-    unit_mismatches: list[str] = []
-    for req in items_requested:
-        req_unit = _normalize_unit(req.get("unit", ""))
-        zoho_item = zoho_search_item_for_quote(req["product"], requested_unit=req_unit)
-        if zoho_item and zoho_item.get("item_id"):
-            matched_unit = _normalize_unit(zoho_item.get("unit", ""))
-            # Safety net: if the client said LB and the only match we could find
-            # is UND (or vice versa), DO NOT auto-quote — flag it instead. This
-            # protects us from charging, say, 100 electrodes as UND when the
-            # client wanted 100 LB.
-            if req_unit and matched_unit and req_unit != matched_unit:
-                unit_mismatches.append(
-                    f"{req['product']} (pidió {req_unit}, en catálogo solo hay {matched_unit})"
-                )
-                continue
-            line_items.append({**zoho_item,
-                               "quantity": max(1, int(req.get("quantity", 1)))})
-        else:
-            not_found.append(req["product"])
-
-    # If we detected unit mismatches, bail out and hand off to a human. Better
-    # to ask than to send a wrong cotización.
-    if unit_mismatches and not line_items:
-        wa_send(
-            from_number,
-            "Necesito confirmar la unidad de medida antes de cotizar:\n\n"
-            f"• {chr(10).join(unit_mismatches)}\n\n"
-            "¿Me confirma si es por libra, por unidad o por caja? "
-            f"O si prefiere, comuníquese al {ELECTRODE_REDIRECT_PHONE}.",
-        )
-        return
-
-    if not line_items:
-        product_list = ", ".join(r["product"] for r in items_requested)
-        wa_send(
-            from_number,
-            f"Identifiqué que necesita: *{product_list}*.\n\n"
-            "Sin embargo, no pude ubicar ese(os) producto(s) en nuestro sistema para generar la cotización automática. "
-            f"Por favor comuníquese al {ELECTRODE_REDIRECT_PHONE} para que le preparemos la cotización manualmente. "
-            "Podemos enviarla por WhatsApp o correo electrónico. 📋",
-        )
-        return
-
-    # 3) Pick customer name: explicit override from message > stored meta name > WhatsApp display name
     meta = get_conv_meta(state, from_number)
-    if company_name_override and len(company_name_override) > 1:
-        customer_name = company_name_override
-    elif from_name and from_name != from_number:
-        customer_name = from_name
-    elif meta.get("name"):
-        customer_name = meta["name"]
-    else:
-        customer_name = "Cliente WhatsApp"
+    pending = meta.get("pending_quote") or {}
 
-    # 4) Create the Zoho estimate (creates contact if needed, default city SPS)
+    if pending.get("items"):
+        suggested = pending.get("suggested", "Consumidor Final")
+        customer_name = _parse_quote_name_response(text, suggested)
+        line_items = pending["items"]
+        not_found = pending.get("not_found", [])
+        unit_mismatches = pending.get("unit_mismatches", [])
+        meta.pop("pending_quote", None)
+        log_action("QuoteAgent", "resumed_pending",
+                   f"name='{customer_name}' items={len(line_items)}")
+    else:
+        items_requested, company_name_override = extract_items_for_quote(text, history)
+
+        if not items_requested:
+            wa_send(
+                from_number,
+                "¡Con gusto le preparo la cotización! 📋\n\n"
+                "Por favor indíqueme qué productos necesita y en qué cantidades. "
+                "Ejemplo: *10 cajas de electrodo 6010 1/8* o *5 caretas básicas*.",
+            )
+            return
+
+        line_items = []
+        not_found = []
+        unit_mismatches = []
+        for req in items_requested:
+            req_unit = _normalize_unit(req.get("unit", ""))
+            zoho_item = zoho_search_item_for_quote(req["product"], requested_unit=req_unit)
+            if zoho_item and zoho_item.get("item_id"):
+                matched_unit = _normalize_unit(zoho_item.get("unit", ""))
+                if req_unit and matched_unit and req_unit != matched_unit:
+                    unit_mismatches.append(
+                        f"{req['product']} (pidió {req_unit}, en catálogo solo hay {matched_unit})"
+                    )
+                    continue
+                line_items.append({**zoho_item,
+                                   "quantity": max(1, int(req.get("quantity", 1)))})
+            else:
+                not_found.append(req["product"])
+
+        if unit_mismatches and not line_items:
+            wa_send(
+                from_number,
+                "Necesito confirmar la unidad de medida antes de cotizar:\n\n"
+                f"• {chr(10).join(unit_mismatches)}\n\n"
+                "¿Me confirma si es por libra, por unidad o por caja? "
+                f"O si prefiere, comuníquese al {ELECTRODE_REDIRECT_PHONE}.",
+            )
+            return
+
+        if not line_items:
+            product_list = ", ".join(r["product"] for r in items_requested)
+            wa_send(
+                from_number,
+                f"Identifiqué que necesita: *{product_list}*.\n\n"
+                "Sin embargo, no pude ubicar ese(os) producto(s) en nuestro sistema para generar la cotización automática. "
+                f"Por favor comuníquese al {ELECTRODE_REDIRECT_PHONE} para que le preparemos la cotización manualmente. "
+                "Podemos enviarla por WhatsApp o correo electrónico. 📋",
+            )
+            return
+
+        if company_name_override and len(company_name_override) > 1:
+            customer_name = company_name_override
+        else:
+            suggested = (
+                from_name if (from_name and from_name != from_number)
+                else (meta.get("name") or "Consumidor Final")
+            )
+            meta["pending_quote"] = {
+                "items": line_items,
+                "not_found": not_found,
+                "unit_mismatches": unit_mismatches,
+                "suggested": suggested,
+                "asked_at": datetime.now().isoformat(),
+            }
+            save_state(state)
+            items_summary = ", ".join((li.get("name", "") or "")[:35] for li in line_items)
+            wa_send(
+                from_number,
+                f"¡Con gusto le preparo la cotización! 📋\n\n"
+                f"Identifiqué: *{items_summary}*\n\n"
+                f"¿Le genero la cotización a nombre de *{suggested}* o a nombre de otra empresa?\n"
+                f"(Responda 'sí' para usar {suggested}, escriba el nombre de la empresa, "
+                f"o 'sin nombre' para Consumidor Final)"
+            )
+            log_action("QuoteAgent", "asked_customer_name", f"suggested={suggested}")
+            return
+
     estimate = zoho_create_estimate(customer_name, from_number, line_items)
     if not estimate:
         wa_send(
@@ -1470,7 +1554,6 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
     est_id     = estimate.get("estimate_id", "")
     total      = estimate.get("total", 0.0)
 
-    # 5) Send summary + PDF
     lines_txt = "\n".join(
         f"  • {li['quantity']} x {li['name']} — L{li['rate'] * li['quantity'] * 1.15:,.2f} c/ISV"
         for li in line_items
@@ -1500,7 +1583,6 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                 f"(No se pudo generar el PDF automáticamente. "
                 f"Su cotización #{est_number} está registrada en nuestro sistema.)")
 
-    # 6) Update conversation history
     if from_name and from_name != from_number:
         meta["name"] = from_name
     meta["last_active"] = datetime.now().isoformat()
@@ -1542,6 +1624,14 @@ def orchestrate(message_data: dict):
 
         if re.fullmatch(r"[a-zA-Z]{2,5}\d{4,8}", text.strip()):
             log_action("Orchestrator", "skipped_zoho_code", text)
+            return
+
+        # If there's a pending quote awaiting customer-name confirmation,
+        # route this message to quote_agent regardless of detect_quote_request.
+        _meta_check = get_conv_meta(state, from_number)
+        if _meta_check.get("pending_quote"):
+            log_action("Orchestrator", "routed_pending_quote", from_number)
+            quote_agent(from_number, from_name, text, state)
             return
 
         if detect_quote_request(text):
