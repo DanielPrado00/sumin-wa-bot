@@ -45,6 +45,31 @@ def forward_to_console(direction: str, phone: str, name: str, body: str, msg_typ
             pass
 
 
+def is_conversation_paused(phone: str) -> bool:
+    """Ask the console whether a human took over this conversation.
+
+    Returns True ONLY when the console confirms the bot is paused. On any
+    error (timeout, network, console down) we default to False so the bot
+    keeps working — better to send an extra message than to go silent.
+    """
+    if not CONSOLE_API_URL or not INTERNAL_API_TOKEN:
+        return False
+    try:
+        r = httpx.get(
+            f"{CONSOLE_API_URL}/internal/conversations/{phone}/state",
+            headers={"X-Internal-Token": INTERNAL_API_TOKEN},
+            timeout=4,
+        )
+        if r.status_code == 200:
+            return bool(r.json().get("paused", False))
+    except Exception as e:
+        try:
+            log_action("CONSOLE_BRIDGE", "paused_check_error", str(e)[:120])
+        except Exception:
+            pass
+    return False
+
+
 # ─── ZOHO BOOKS CONFIG ───────────────────────────────────────────────────────
 ZOHO_CLIENT_ID     = os.environ.get("ZOHO_CLIENT_ID", "")
 ZOHO_CLIENT_SECRET = os.environ.get("ZOHO_CLIENT_SECRET", "")
@@ -1649,6 +1674,11 @@ def orchestrate(message_data: dict):
         forward_to_console("inbound", from_number, from_name, "[audio]", "audio")
     elif msg_type == "document":
         forward_to_console("inbound", from_number, from_name, "[documento]", "document")
+
+    # If a human took over this conversation in the console, do NOT respond.
+    if is_conversation_paused(from_number):
+        log_action("Orchestrator", "skipped_bot_paused", from_number)
+        return
 
     if fulfillment_agent(message_data, state):
         return
