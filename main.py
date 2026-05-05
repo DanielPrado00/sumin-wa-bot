@@ -70,6 +70,66 @@ def is_conversation_paused(phone: str) -> bool:
     return False
 
 
+# When True, the bot does NOT send quotes directly to the customer — it submits
+# them to the console as `pending_approval`, sends a holding message, and waits
+# for a human to click Approve in /approvals (which sends the formal quote via
+# WhatsApp from the console).
+QUOTE_APPROVAL_MODE = os.environ.get("QUOTE_APPROVAL_MODE", "on").lower() in {"on", "1", "true", "yes"}
+
+
+def submit_pending_quote_to_console(
+    phone: str,
+    customer_name: str | None,
+    line_items: list[dict],
+    zoho_estimate_id: str | None,
+    estimate_number: str | None,
+    notes: str | None = None,
+) -> bool:
+    """POST a pending-approval quote to the console. Returns True on success."""
+    if not CONSOLE_API_URL or not INTERNAL_API_TOKEN:
+        return False
+    payload = {
+        "phone": phone,
+        "customer_name": customer_name or "",
+        "zoho_estimate_id": zoho_estimate_id or "",
+        "estimate_number": estimate_number or "",
+        "notes": notes or "",
+        "approval_reason": "Cotización generada por bot, requiere aprobación del vendedor",
+        "lines": [
+            {
+                "name": li.get("name", ""),
+                "description": li.get("description") or li.get("name", ""),
+                "quantity": float(li.get("quantity", 0) or 0),
+                "rate": float(li.get("rate", 0) or 0),
+                "quoted_unit": li.get("unit", "UND") or "UND",
+                "requested_unit": li.get("requested_unit"),
+                "sku": li.get("sku"),
+                "zoho_item_id": li.get("item_id"),
+            }
+            for li in line_items
+        ],
+    }
+    try:
+        r = httpx.post(
+            f"{CONSOLE_API_URL}/internal/quotes",
+            json=payload,
+            headers={"X-Internal-Token": INTERNAL_API_TOKEN},
+            timeout=8,
+        )
+        if r.status_code == 200:
+            log_action("CONSOLE_BRIDGE", "quote_pending_submitted",
+                       f"phone={phone} est={estimate_number} status=ok")
+            return True
+        log_action("CONSOLE_BRIDGE", "quote_submit_error",
+                   f"status={r.status_code} body={r.text[:150]}")
+    except Exception as e:
+        try:
+            log_action("CONSOLE_BRIDGE", "quote_submit_exception", str(e)[:120])
+        except Exception:
+            pass
+    return False
+
+
 # ─── ZOHO BOOKS CONFIG ───────────────────────────────────────────────────────
 ZOHO_CLIENT_ID     = os.environ.get("ZOHO_CLIENT_ID", "")
 ZOHO_CLIENT_SECRET = os.environ.get("ZOHO_CLIENT_SECRET", "")
@@ -1673,6 +1733,61 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
     est_id     = estimate.get("estimate_id", "")
     total      = estimate.get("total", 0.0)
 
+    # ─── APPROVAL MODE ─────────────────────────────────────────────────
+    # If approval mode is on, register the quote in the console (status =
+    # pending_approval) and send the customer a holding message. The vendor
+    # approves from /approvals, which triggers the formal quote send.
+    if QUOTE_APPROVAL_MODE:
+        notes_for_console = f"Cotización Zoho EST {est_number} — a nombre de {customer_name}"
+        if not_found:
+            notes_for_console += f". Items no encontrados: {', '.join(not_found)}"
+        if unit_mismatches:
+            notes_for_console += f". Mismatches de unidad: {', '.join(unit_mismatches)}"
+        ok = submit_pending_quote_to_console(
+            phone=from_number,
+            customer_name=customer_name,
+            line_items=line_items,
+            zoho_estimate_id=est_id,
+            estimate_number=est_number,
+            notes=notes_for_console,
+        )
+        items_summary = ", ".join(li.get("name", "")[:30] for li in line_items[:3])
+        more = f" (+{len(line_items) - 3} más)" if len(line_items) > 3 else ""
+        if ok:
+            wa_send(
+                from_number,
+                f"Buen día! Estamos preparando su cotización formal "
+                f"({items_summary}{more}). En breve un miembro de nuestro "
+                f"equipo se la enviará por este mismo medio. Gracias por su "
+                f"paciencia 🙏",
+            )
+            log_action("QuoteAgent", "submitted_for_approval",
+                       f"est={est_number} total=L{total:,.2f} → {customer_name}")
+        else:
+            # Console down — fall back to direct send so the customer is not stuck.
+            log_action("QuoteAgent", "approval_submit_failed_fallback_direct", est_number)
+            lines_txt = "\n".join(
+                f"  • {li['quantity']} x {li['name']} — L{li['rate'] * li['quantity'] * 1.15:,.2f} c/ISV"
+                for li in line_items
+            )
+            wa_send(
+                from_number,
+                f"✅ *Cotización #{est_number}*\n"
+                f"A nombre de: {customer_name}\n\n"
+                f"{lines_txt}\n\n"
+                f"*Total (ISV incluido):* L{total:,.2f}",
+            )
+        # Skip PDF send + history append below — done.
+        meta["last_active"] = datetime.now().isoformat()
+        meta["last_msg"] = text[:80]
+        history.append({"role": "user", "content": text})
+        history.append({"role": "assistant",
+                        "content": f"[Cotización #{est_number} pendiente de aprobación humana, total: L{total:,.2f}]"})
+        state["conversations"][from_number] = history[-20:]
+        save_state(state)
+        return
+
+    # ─── DIRECT MODE (legacy, only when QUOTE_APPROVAL_MODE=off) ────────
     lines_txt = "\n".join(
         f"  • {li['quantity']} x {li['name']} — L{li['rate'] * li['quantity'] * 1.15:,.2f} c/ISV"
         for li in line_items
