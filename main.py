@@ -17,6 +17,34 @@ ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 STATE_FILE = "orders_state.json"
 LOG_FILE   = "bot_log.json"
 
+# ─── CONSOLE BRIDGE ──────────────────────────────────────────────────────────
+CONSOLE_API_URL = os.environ.get("CONSOLE_API_URL", "")
+INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "")
+
+def forward_to_console(direction: str, phone: str, name: str, body: str, msg_type: str = "text"):
+    """Fire-and-forget POST to sumin-console-backend so the bandeja mirrors WA."""
+    if not CONSOLE_API_URL or not INTERNAL_API_TOKEN:
+        return
+    try:
+        httpx.post(
+            f"{CONSOLE_API_URL}/internal/messages",
+            json={
+                "direction": direction,
+                "phone": phone,
+                "name": name or "",
+                "body": body or "",
+                "msg_type": msg_type,
+            },
+            headers={"X-Internal-Token": INTERNAL_API_TOKEN},
+            timeout=5,
+        )
+    except Exception as e:
+        try:
+            log_action("CONSOLE_BRIDGE", "error", str(e)[:120])
+        except Exception:
+            pass
+
+
 # ─── ZOHO BOOKS CONFIG ───────────────────────────────────────────────────────
 ZOHO_CLIENT_ID     = os.environ.get("ZOHO_CLIENT_ID", "")
 ZOHO_CLIENT_SECRET = os.environ.get("ZOHO_CLIENT_SECRET", "")
@@ -500,6 +528,7 @@ def wa_send(to: str, text: str):
     body = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
     r = httpx.post(url, json=body, headers=headers, timeout=15)
     log_action("WA_SEND", f"→ {to}", text[:100])
+    forward_to_console("outbound", to, "", text)
     return r.json()
 
 def wa_send_image_url(to: str, url: str, caption: str = ""):
@@ -1609,6 +1638,17 @@ def orchestrate(message_data: dict):
     msg_type    = message_data.get("type", "text")
 
     log_action("Orchestrator", "received", f"from={from_name} type={msg_type}")
+
+    # Mirror inbound to the console bandeja (fire-and-forget, never blocks bot).
+    if msg_type == "text":
+        _inbound_text = message_data.get("text", {}).get("body", "")
+        forward_to_console("inbound", from_number, from_name, _inbound_text)
+    elif msg_type == "image":
+        forward_to_console("inbound", from_number, from_name, "[imagen]", "image")
+    elif msg_type == "audio":
+        forward_to_console("inbound", from_number, from_name, "[audio]", "audio")
+    elif msg_type == "document":
+        forward_to_console("inbound", from_number, from_name, "[documento]", "document")
 
     if fulfillment_agent(message_data, state):
         return
