@@ -76,6 +76,25 @@ def is_conversation_paused(phone: str) -> bool:
 # WhatsApp from the console).
 QUOTE_APPROVAL_MODE = os.environ.get("QUOTE_APPROVAL_MODE", "on").lower() in {"on", "1", "true", "yes"}
 
+# Internal SUMIN numbers that bypass the approval gate. When one of these
+# numbers asks the bot for a cotización, we go straight to the legacy
+# direct-send flow (estimate + PDF in one shot), because the recipient is
+# an employee/owner who just wants the PDF in hand to forward to the end
+# customer — they're already trusted, no review needed.
+TRUSTED_NUMBERS: set[str] = {
+    "50497041381",   # Daniel Prado (founder)
+    "50431742116",   # Sumin SPS — tablet de mostrador
+    "50431740168",   # Sumin Tegucigalpa — tablet de mostrador
+    "50431742019",   # Eva Pinzón
+    "50431848009",   # Eduardo Prado
+}
+
+
+def is_trusted_number(phone: str) -> bool:
+    """True if `phone` belongs to an internal SUMIN user (skip approval gate)."""
+    digits = re.sub(r"\D", "", phone or "")
+    return digits in TRUSTED_NUMBERS
+
 
 def submit_pending_quote_to_console(
     phone: str,
@@ -1823,7 +1842,10 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
     # If approval mode is on, register the quote in the console (status =
     # pending_approval) and send the customer a holding message. The vendor
     # approves from /approvals, which triggers the formal quote send.
-    if QUOTE_APPROVAL_MODE:
+    #
+    # Exception: trusted internal SUMIN numbers (founders, store tablets, key
+    # employees) skip the gate and fall through to direct-send below.
+    if QUOTE_APPROVAL_MODE and not is_trusted_number(from_number):
         notes_for_console = f"Cotización Zoho EST {est_number} — a nombre de {customer_name}"
         if not_found:
             notes_for_console += f". Items no encontrados: {', '.join(not_found)}"
