@@ -523,6 +523,56 @@ NUNCA cotices boquilla GPN-1 / 1-101-3 / etc. sin pasar por este flujo, aunque [
 sugiera un match. El SKU exacto depende del tipo confirmado por el cliente.
 
 ═══════════════════════════════════════
+TABLA DE BOQUILLAS DE CORTE — GROSOR → NÚMERO
+═══════════════════════════════════════
+Cuando el cliente diga el grosor de la lámina/material que va a cortar (en pulgadas o
+milímetros), respondele con el número de boquilla que corresponde. NO pidas el número —
+deducílo del grosor. Si el cliente pide "para cortar 1/4 de pulgada", la respuesta es
+"para 1/4\" le corresponde la boquilla #0 (acetileno) o #0 (GPN)".
+
+⚠️ SUMIN NO STOCKEA los tamaños "000" ni "00". Si el grosor del cliente cae en esos rangos,
+mencionarle que ese tamaño no lo manejamos y redirigir al teléfono o tienda. Solo cotizamos
+de #0 hacia arriba.
+
+━━━ ACETILENO — Estilo 1-101 (SafeCut/Victor) ━━━
+Aplica para sopletes Victor/SafeCut con gas acetileno (oxiacetilénico):
+  • Grosor hasta 1/2"  (≤12 mm)  → boquilla #0
+  • Grosor hasta 3/4"  (≤19 mm)  → boquilla #1
+  • Grosor hasta 1"    (≤25 mm)  → boquilla #2
+  • Grosor hasta 2"    (≤50 mm)  → boquilla #3
+  • Grosor hasta 3"    (≤76 mm)  → boquilla #4
+  • Grosor hasta 4"    (≤102 mm) → boquilla #5
+  • Grosor hasta 6"    (≤152 mm) → boquilla #6
+
+━━━ PROPANO / GAS LPG / GAS NATURAL — Estilo GPN (SafeCut/Victor) ━━━
+Aplica para sopletes Victor/SafeCut con propano, LPG o gas natural:
+  • Grosor hasta 1/2"  (≤12 mm)  → boquilla GPN #0
+  • Grosor hasta 3/4"  (≤19 mm)  → boquilla GPN #1
+  • Grosor hasta 1"    (≤25 mm)  → boquilla GPN #2
+  • Grosor hasta 2"    (≤50 mm)  → boquilla GPN #3
+  • Grosor hasta 3"    (≤76 mm)  → boquilla GPN #4
+  • Grosor hasta 4"    (≤102 mm) → boquilla GPN #5
+
+━━━ PLASMA — Estilo P80 (SafeCut, antorchas Panasonic / P80) ━━━
+Solo aplica si el cliente confirmó que su antorcha es Panasonic o P80:
+  • Grosor 1/32" – 1/4"   (1–6 mm)   → boquilla P80-40A
+  • Grosor 1/4"  – 1/2"   (6–12 mm)  → boquilla P80-60A
+  • Grosor 1/2"  – 3/4"   (12–20 mm) → boquilla P80-80A
+
+━━━ PLASMA — Otras antorchas (Hypertherm 1000s, Lincoln Tomahawk, Hugong, Texas, Miller) ━━━
+NO TENEMOS TABLA DE EQUIVALENCIAS. Pedirle al cliente:
+  "¿Me puede pasar el número de parte impreso en la boquilla actual, o foto de la
+   boquilla y de la antorcha? Sin eso no podemos confirmar la referencia compatible."
+
+NO inventes referencias para estas marcas. Si el cliente no tiene número de parte ni foto,
+redirigir a +504 3334-0477.
+
+━━━ CONVERSIÓN MM ↔ PULGADAS (referencia rápida) ━━━
+  3 mm ≈ 1/8"   |  6 mm ≈ 1/4"   |  10 mm ≈ 3/8"   |  12 mm ≈ 1/2"
+  19 mm ≈ 3/4"  |  25 mm ≈ 1"    |  50 mm ≈ 2"     |  76 mm ≈ 3"
+  102 mm ≈ 4"   |  152 mm ≈ 6"
+
+═══════════════════════════════════════
 CONSUMIBLES MIG — REGLA DE FOTO DEL DIFUSOR
 ═══════════════════════════════════════
 Para CUALQUIER consumible MIG (boquilla, tobera, difusor) SIEMPRE pedir foto del difusor:
@@ -1254,6 +1304,25 @@ def sales_agent(from_number: str, from_name: str, text: str, state: dict):
     log_action("SalesAgent", "sent_response", response[:100])
     save_state(state)
 
+# Hints en la respuesta del modelo de visión que indican que el cliente mandó un
+# consumible MIG (difusor, portacontacto, tobera, antorcha). En esos casos hay tantas
+# variables de compatibilidad (Lincoln Magnum / Miller / Tweco / Euro / etc.) que
+# es mejor que un asesor humano lo atienda directo, en lugar de que el bot dé un
+# análisis técnico largo y termine pidiendo más fotos.
+_MIG_CONSUMABLE_HINTS = (
+    "difusor", "diffuser", "gas diffuser",
+    "portacontacto", "porta contacto", "punta de contacto", "contact tip",
+    "tobera mig", "boquilla mig", "consumible mig", "consumibles mig",
+    "antorcha mig", "magnum 100", "magnum 200", "magnum 300",
+    "tweco", "euro mig", "lincoln magnum", "miller mig",
+)
+
+
+def _looks_like_mig_consumable(product_info: str) -> bool:
+    p = (product_info or "").lower()
+    return any(k in p for k in _MIG_CONSUMABLE_HINTS)
+
+
 def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str, state: dict):
     log_action("VisionAgent", "processing_image", f"{from_name} sent image")
     image_bytes = wa_download_image(media_id)
@@ -1261,10 +1330,22 @@ def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str
         return
     if is_comprobante(image_bytes, mime_type):
         payment_agent(from_number, from_name, media_id, image_bytes, state)
-    else:
-        product_info = identify_product(image_bytes, mime_type)
-        response = f"Identificamos el producto:\n\n{product_info}\n\n¿Cuántas unidades necesita?"
-        wa_send(from_number, response)
+        return
+
+    product_info = identify_product(image_bytes, mime_type)
+
+    # Consumible MIG → respuesta corta, handoff a asesor humano.
+    if _looks_like_mig_consumable(product_info):
+        log_action("VisionAgent", "mig_consumable_handoff", from_number)
+        wa_send(
+            from_number,
+            "Recibimos su foto 👍 En breve uno de nuestros asesores le confirma la "
+            "referencia exacta de ese consumible MIG.",
+        )
+        return
+
+    response = f"Identificamos el producto:\n\n{product_info}\n\n¿Cuántas unidades necesita?"
+    wa_send(from_number, response)
 
 def payment_agent(from_number: str, from_name: str, media_id: str, image_bytes: bytes, state: dict):
     log_action("PaymentAgent", "processing", f"Comprobante from {from_name}")
