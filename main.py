@@ -698,22 +698,79 @@ def _normalize_unit(u: str) -> str:
     return s
 
 
+_QUERY_STOPWORDS = {
+    "el", "la", "los", "las", "un", "una", "unos", "unas",
+    "de", "del", "al", "a", "en", "con", "sin", "para", "por",
+    "es", "son", "está", "esta", "están", "estan",
+    "me", "le", "lo", "se", "te", "mi", "tu",
+    "que", "qué", "cual", "cuál", "como", "cómo",
+    "y", "o", "u", "pero", "si", "no",
+    "cuanto", "cuánto", "cuesta", "vale", "tienen", "hay",
+    "manejan", "venden", "stock", "disponible",
+    "precio", "busco", "necesito", "quiero", "puedes", "porfa", "porfavor",
+    "favor", "buen", "buenos", "buena", "buenas", "dia", "día", "dias", "días",
+    "tarde", "noche", "noches",
+    "hola", "ok", "gracias", "saludos",
+}
+
+
+def _query_tokens(text: str) -> list[str]:
+    """Extract significant tokens for catalog pre-filtering."""
+    if not text:
+        return []
+    s = re.sub(r"[¿?¡!.,;:()\"]", " ", text.lower())
+    raw = s.split()
+    out: list[str] = []
+    for tok in raw:
+        tok = tok.strip("-")
+        if not tok:
+            continue
+        if tok in _QUERY_STOPWORDS:
+            continue
+        if len(tok) < 2:
+            continue
+        out.append(tok)
+    return out
+
+
+def _prefilter_catalog(query: str, catalog: list, top_n: int = 200) -> list:
+    """Score each item by query-token overlap. Falls back to first `top_n` if no matches."""
+    tokens = _query_tokens(query)
+    if not tokens or not catalog:
+        return catalog[:top_n]
+    scored: list[tuple[int, float, dict]] = []
+    for item in catalog:
+        name = (item.get("item_name") or "").lower()
+        sku  = (item.get("sku") or "").lower()
+        score = 0
+        for t in tokens:
+            if t in name:
+                score += 2
+            if t in sku:
+                score += 1
+        if score > 0:
+            stock = float(item.get("stock_on_hand") or 0)
+            scored.append((score, stock, item))
+    if not scored:
+        return catalog[:top_n]
+    scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    return [it for _, _, it in scored[:top_n]]
+
+
 def match_product_to_catalog(client_query: str, catalog: list,
                              requested_unit: str = "") -> dict | None:
     """Pick the best-matching Zoho item for a free-text product description.
 
-    If `requested_unit` is given (e.g. "LB" after the client said "libras"), we
-    restrict the catalog shown to Claude to items with that unit. This is what
-    prevents the classic bug of cotizing a product-sold-by-LB as
-    product-by-UND (e.g. welding electrodes).
+    Pipeline:
+      1) Optional unit narrowing (LB/UND/KG).
+      2) Token-based pre-filter so the LLM never has to scan 940 SKUs.
+      3) Haiku 4.5 picks the SKU from the focused list.
+      4) Resolve SKU → item, with fallbacks.
     """
     if not catalog:
         return None
 
     req_unit = _normalize_unit(requested_unit)
-
-    # 1) Filter by requested unit when we have one. If nothing matches, fall
-    #    back to the full catalog so we don't silently return None.
     filtered = catalog
     if req_unit:
         narrowed = [it for it in catalog
@@ -721,17 +778,25 @@ def match_product_to_catalog(client_query: str, catalog: list,
         if narrowed:
             filtered = narrowed
 
-    # 2) Build catalog text — INCLUDING the unit field so the LLM can see it
-    #    and disambiguate SKUs that differ only by unit of measure.
+    focused = _prefilter_catalog(client_query, filtered, top_n=200)
+
+    try:
+        log_action("ZohoAPI", "prefilter",
+                   f"query='{client_query[:60]}' "
+                   f"in:{len(filtered)} out:{len(focused)} "
+                   f"top3={[it.get('item_name','')[:40] for it in focused[:3]]}")
+    except Exception:
+        pass
+
     catalog_lines = []
-    for item in filtered:
+    for item in focused:
         name = item.get("item_name", "")
         sku  = item.get("sku", "")
         rate = item.get("rate", 0)
         unit = item.get("unit", "")
         if name:
             catalog_lines.append(f"SKU:{sku} | {name} | unit:{unit} | L.{rate}")
-    catalog_text = "\n".join(catalog_lines[:350])
+    catalog_text = "\n".join(catalog_lines)
 
     unit_hint = ""
     if req_unit:
@@ -757,22 +822,29 @@ def match_product_to_catalog(client_query: str, catalog: list,
             return None
         sku_clean = response.strip()
 
-        # 3) Resolve SKU → item, preferring the filtered (unit-matching) set
+        for item in focused:
+            if item.get("sku", "").strip() == sku_clean:
+                return item
         for item in filtered:
             if item.get("sku", "").strip() == sku_clean:
                 return item
         for item in catalog:
             if item.get("sku", "").strip() == sku_clean:
                 return item
-        for item in filtered:
-            if sku_clean in item.get("sku", "") or item.get("sku", "") in sku_clean:
+        for item in focused:
+            sku = item.get("sku", "")
+            if sku and (sku_clean in sku or sku in sku_clean):
                 return item
         for item in catalog:
-            if sku_clean in item.get("sku", "") or item.get("sku", "") in sku_clean:
+            sku = item.get("sku", "")
+            if sku and (sku_clean in sku or sku in sku_clean):
                 return item
         return None
     except Exception as e:
-        log_action("ZohoAPI", "match_error", str(e))
+        try:
+            log_action("ZohoAPI", "match_error", str(e))
+        except Exception:
+            pass
         return None
 
 _INQUIRY_WORDS = [
