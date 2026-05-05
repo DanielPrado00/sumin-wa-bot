@@ -390,12 +390,35 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    📍 Tegucigalpa (Comayagüela): 8 calle, entre 3ra y 4ta avenida, frente a cafetería Macao, a la par del nuevo estacionamiento del Hospital Policlínica
    https://maps.app.goo.gl/2iNJW6wMDtKn68cg8
 
-9. ENVÍOS:
-   "Si es fuera de San Pedro Sula y Tegucigalpa, se le hace su envío mediante Expreco."
-   - Nacional (Expreco): 1-2 días hábiles
-   - Roatán, Guanaja, Utila: Island Shipping o Bahía Shipping
-   - Flete Tarifa A (SPS↔Tegucigalpa o SPS↔Puerto Cortés): L87 base + L1/lb adicional
-   - Flete Tarifa B (otros destinos): L174 base + L1.96/lb adicional
+9. ENVÍOS / RETIRO EN TIENDA:
+
+   ━━━ REGLA POR MONTO DEL PEDIDO (MUY IMPORTANTE) ━━━
+   • Si el pedido es MENOR a L.10,000 (orden chica/promedio):
+     - NO ofrezcas envío proactivamente.
+     - Pregunta primero: "¿Desde qué parte del país nos escribe?
+       ¿Pasa por nuestra tienda en San Pedro Sula o en Tegucigalpa?"
+     - Solo si el cliente pide explícitamente envío, ofrécelo (ver opciones abajo).
+
+   • Si el pedido es MAYOR O IGUAL a L.10,000 (orden grande):
+     - Pregunta directo: "¿Necesita que se lo enviemos o pasa a recoger por
+       nuestra tienda?" (luego confirma sucursal SPS/Tegucigalpa o destino).
+
+   ━━━ OPCIONES DE ENVÍO (cuando aplique) ━━━
+   - Fuera de San Pedro Sula y Tegucigalpa (resto del país terrestre):
+     Expreco — 1-2 días hábiles.
+   - Islas de la Bahía (Utila, Roatán, Guanaja):
+     Island Shipping o Bahía Shipping (no usamos Expreco para islas).
+   - Flete Tarifa A (SPS↔Tegucigalpa o SPS↔Puerto Cortés):
+     L.87 base + L.1/lb adicional.
+   - Flete Tarifa B (otros destinos):
+     L.174 base + L.1.96/lb adicional.
+
+   ━━━ ALIAS DE CIUDADES (trata como equivalentes) ━━━
+   - "sps" = "san pedro" = "san pedro sula" = SPS.
+   - "tegus" = "tgu" = "tegucigalpa" = "comayagüela" = TGU.
+   - "ceiba" = "la ceiba"; "puerto" / "pto cortés" = Puerto Cortés.
+   - "utila" / "roatán" / "roatan" / "guanaja" = Islas de la Bahía
+     (siempre Island/Bahía Shipping, nunca Expreco).
 
 ═══════════════════════════════════════
 HORARIO
@@ -1282,16 +1305,44 @@ def fulfillment_agent(message_data: dict, state: dict) -> bool:
 # ════════════════════════════════════════════════════════════════════════════════
 
 QUOTE_TRIGGERS = [
-    "cotización", "cotizacion", "cotizame", "cotizar", "presupuesto",
+    "cotización", "cotizacion", "cotiza",   # "cotiza" cubre "cotiza el 6011", "cotizame", etc.
+    "cotizar", "presupuesto",
     "estimación", "estimacion", "precio formal", "factura proforma",
     "me pueden cotizar", "me das una coti", "necesito una coti",
     "quiero una coti", "me hacen una coti", "pueden cotizar",
     "hágame cotización", "hagame cotizacion", "hágame una cotización",
+    # Variantes informales muy comunes en Honduras (cotice/cotíceme/cotizeme):
+    "cotice", "cotíce", "cotíceme", "coticeme", "cotizeme", "cotízeme",
+    "me cotice", "me cotíce",
+    # Forma corta "una coti" / "la coti":
+    "una coti", "la coti",
 ]
 
+# Regex para detectar patrones cantidad + unidad + producto típicos de SUMIN.
+# Ej: "100 lbs de 6011", "5 cajas de 7018", "20 und de discos", "2 rollos de mig"
+_QTY_PRODUCT_RE = re.compile(
+    r"\b(\d{1,5})\s*(lb|lbs|libra|libras|kg|kilo|kilos|caja|cajas|"
+    r"rollo|rollos|unidad|unidades|und|pza|pzas|piezas|metro|metros|"
+    r"galon|galón|galones|disco|discos|par|pares)\b",
+    re.IGNORECASE,
+)
+
+
 def detect_quote_request(text: str) -> bool:
+    """Decide si el mensaje del cliente debe enrutarse al agente de cotización.
+
+    Activa cotización si:
+      (a) usa una palabra-gatillo explícita (cotíceme, cotización, etc.), o
+      (b) menciona una cantidad + unidad ("100 lbs de 6011", "5 cajas de 7018"),
+          ya que en Honduras los clientes piden cotización así sin la palabra.
+    """
     t = text.lower()
-    return any(kw in t for kw in QUOTE_TRIGGERS)
+    if any(kw in t for kw in QUOTE_TRIGGERS):
+        return True
+    # Patrón cantidad+unidad: implica intención de comprar/cotizar varios productos
+    if _QTY_PRODUCT_RE.search(t):
+        return True
+    return False
 
 
 def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
