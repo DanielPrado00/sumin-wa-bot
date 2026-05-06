@@ -892,6 +892,80 @@ def identify_product(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
     )
     return msg.content[0].text
 
+
+def try_extract_order_from_image(image_bytes: bytes, mime_type: str = "image/jpeg") -> dict | None:
+    """Inspect an image and try to extract a structured order list.
+
+    Returns a dict with shape:
+      {
+        "is_order_list": bool,
+        "items":    [{"quantity": float, "unit": str, "product": str}, ...],
+        "excluded": [{"quantity": float, "unit": str, "product": str, "reason": str}, ...]
+      }
+    Returns None if the image clearly isn't an order list, or on parse error.
+
+    "Order list" means: a structured list of multiple welding products with quantities —
+    handwritten purchase orders, screenshots of order lists, typed lists, invoices, etc.
+    A photo of a single loose product (one electrode, one disc) is NOT an order list.
+
+    Exclusion detection: lines that are crossed out, marked "no comprar" / "X" /
+    "S/STOCK" / "fuera de stock", or have a check ✓ next to them (already ordered).
+    """
+    b64 = base64.standard_b64encode(image_bytes).decode()
+    extraction_prompt = (
+        "Eres un extractor de items de pedidos para SUMIN (ferretería de soldadura, "
+        "Honduras). Mirá la imagen y respondé EN JSON puro, sin texto antes ni después, "
+        "sin bloques de código markdown.\n\n"
+        "Schema:\n"
+        "{\n"
+        '  "is_order_list": true|false,\n'
+        '  "items":    [{"quantity": <num>, "unit": "lb"|"und"|"caja"|"rollo"|"kg"|"", '
+        '"product": "<descripción>"}],\n'
+        '  "excluded": [{"quantity": <num>, "unit": <str>, "product": <str>, '
+        '"reason": "tachado"|"no comprar"|"sin stock"|"ya pedido"}]\n'
+        "}\n\n"
+        "is_order_list es TRUE solo si la imagen es una lista estructurada con varias "
+        "filas de productos + cantidades (solicitud de compra, lista a mano, screenshot "
+        "de pedido, factura, requisición, etc). Para foto de un producto suelto: "
+        "is_order_list = false, items = [], excluded = [].\n\n"
+        "EXCLUSIONES — poné el item en `excluded` si:\n"
+        "- la línea está tachada (línea horizontal sobre el texto),\n"
+        "- al lado dice 'no comprar', 'no', 'X', 'cancelar', 'omitir',\n"
+        "- al lado dice 'S/STOCK', 'sin stock', 'fuera de stock', 'no hay',\n"
+        "- tiene un check ✓ que indica 'ya pedido / ya entregado'.\n\n"
+        "PRODUCTOS típicos: electrodos (6011, 6013, 7018, 309-16, 7018-1, 800/INCONEL, "
+        "etc.), alambre MIG/TIG, varillas, discos abrasivos, caretas, guantes, gas. "
+        "Si una línea es ambigua, igual ponela en items con el texto que mejor leas + "
+        "agregale ' [verificar]' al final del product.\n\n"
+        "Si quantity no se ve, usá 1. Si la unidad no se ve, dejala como cadena vacía."
+    )
+    try:
+        msg = claude.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1500,
+            system="Sos un extractor estructurado. Devolvés exclusivamente JSON puro.",
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": b64}},
+                {"type": "text", "text": extraction_prompt},
+            ]}],
+        )
+        raw = msg.content[0].text.strip()
+        # Tolerate ```json ... ``` wrappers in case the model adds them despite instructions
+        if raw.startswith("```"):
+            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
+        data = json.loads(raw)
+    except Exception as e:
+        log_action("VisionAgent", "extract_order_parse_error", str(e)[:200])
+        return None
+
+    if not isinstance(data, dict) or not data.get("is_order_list"):
+        return None
+    items = [it for it in (data.get("items") or []) if it.get("product")]
+    excluded = data.get("excluded") or []
+    if not items:
+        return None
+    return {"is_order_list": True, "items": items, "excluded": excluded}
+
 def detect_city(text: str) -> str | None:
     t = text.lower()
     if any(k in t for k in ['san pedro', 'sps', 'sampedro', 'pedro sula']):
@@ -1404,6 +1478,57 @@ def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str
     #   2. Daniel (+50497041381) recibe la foto + ficha de la conversación
     #      para que tome la decisión de cuál sistema cotizar y le responda
     #      al cliente directo desde su WhatsApp (o desde el console).
+    # Foto que es una LISTA / SOLICITUD DE COMPRA con varios items + cantidades →
+    # extraer items estructurados y enrutar a quote_agent (mismo flujo que si el
+    # cliente hubiera escrito "cotice 800 lbs de 6011, 800 lbs de 7018, ...").
+    # Para usuarios trusted (Eduardo, Daniel, tablets) el bypass del v8 lleva a
+    # estimate + PDF directo. Para clientes externos cae en /approvals.
+    order = try_extract_order_from_image(image_bytes, mime_type)
+    if order:
+        items = order["items"]
+        excluded = order.get("excluded", [])
+
+        def _qty_num(it: dict) -> float:
+            """Coerce quantity to float — the LLM occasionally returns strings."""
+            try:
+                return float(it.get("quantity", 1) or 1)
+            except (TypeError, ValueError):
+                return 1.0
+
+        items_text = "\n".join(
+            f"  • {_qty_num(it):g} {it.get('unit') or ''} {it['product']}".replace("  ", " ").rstrip()
+            for it in items
+        )
+        ack = f"Recibimos su lista 📋 Encontramos:\n{items_text}"
+        if excluded:
+            excluded_text = "\n".join(
+                f"  • {e.get('product','?')} ({e.get('reason') or 'excluido'})"
+                for e in excluded
+            )
+            ack += f"\n\nExcluidos (no se cotizan):\n{excluded_text}"
+        ack += "\n\nGenerando cotización..."
+        wa_send(from_number, ack)
+        # Construir texto sintético que quote_agent puede parsear con su lógica
+        # actual (cotice X de Y, Z de W, ...).
+        synth_parts = []
+        for it in items:
+            qty = _qty_num(it)
+            unit = it.get("unit") or ""
+            prod = it["product"]
+            piece = f"{qty:g}"
+            if unit:
+                piece += f" {unit}"
+            piece += f" de {prod}"
+            synth_parts.append(piece)
+        synthetic_text = "cotice " + ", ".join(synth_parts)
+        log_action(
+            "VisionAgent",
+            "order_extracted",
+            f"items={len(items)} excluded={len(excluded)} from={from_number}",
+        )
+        quote_agent(from_number, from_name, synthetic_text, state)
+        return
+
     if _looks_like_mig_consumable(product_info):
         log_action("VisionAgent", "mig_consumable_handoff", from_number)
         wa_send(
