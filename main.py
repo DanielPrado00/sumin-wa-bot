@@ -96,6 +96,14 @@ def is_trusted_number(phone: str) -> bool:
     return digits in TRUSTED_NUMBERS
 
 
+# Founder's WhatsApp — receives forwarded MIG-consumable photos for manual
+# advisory. Kept separate from TRUSTED_NUMBERS for clarity.
+DANIEL_PHONE = "50497041381"
+
+# Phone we tell customers to call when we can't fully resolve via bot.
+ELECTRODE_REDIRECT_PHONE_HUMAN = "+504 3334-0477"
+
+
 def submit_pending_quote_to_console(
     phone: str,
     customer_name: str | None,
@@ -583,6 +591,63 @@ Si el cliente manda solo foto de boquilla/tobera sin difusor: pedirle también f
 Solo después de tener foto del difusor podemos identificar el sistema (Lincoln Magnum, Miller,
 Tweco, etc.) y la referencia correcta. Si el cliente no puede mandar foto del difusor:
 redirigir a +504 3334-0477.
+
+═══════════════════════════════════════
+SISTEMAS MIG QUE MANEJAMOS — REFERENCIA INTERNA
+═══════════════════════════════════════
+SUMIN tiene en stock 6 sistemas distintos de consumibles MIG. Cuando un asesor humano
+identifica el sistema correcto a partir de la foto del difusor, le manda al cliente
+una lista con descripciones GENÉRICAS (sin SKU, sin marca específica) y el total.
+
+⚠️ POLÍTICA DE PRIVACIDAD COMERCIAL: nunca le digas al cliente "es del sistema Magnum 200"
+o "es estilo Tweco" o "el SKU es XXX". Solo le decimos genéricamente "boquilla", "difusor",
+"tobera/capuchón" + precio. Esto es para que el cliente no pueda buscar la pieza por
+referencia exacta en Amazon/Temu y termine comprando con SUMIN. Mantener vague.
+
+Sistema 1 — MILLER serie 169 (modelo anterior 252, descontinuado):    4 piezas
+  • Boquilla 0.035" (000-068) o 0.045" (000-069) — L74.75 c/ISV
+  • Difusor parte interna (169-728) — L319.30 c/ISV
+  • Retenedor (169-729) — L345.00 c/ISV
+  • Tobera/capuchón (169-724) — L569.25 c/ISV
+
+Sistema 2 — M25 / Magnum 200:                                           3 piezas
+  • Boquilla (11-35) — L51.75 c/ISV
+  • Difusor (FP 1510-1140) — L207.00 c/ISV
+  • Tobera/capuchón (21-50 WPW) — L339.25 c/ISV
+
+Sistema 3 — M250 / Magnum 250:                                          3 piezas
+  • Boquilla (14-35) — L51.75 c/ISV
+  • Difusor (52FN WPW) — L287.50 c/ISV
+  • Tobera/capuchón (23-50 WPW) — L402.50 c/ISV
+
+Sistema 4 — MDX (Miller nuevo MDX-250):                                 3 piezas
+  • Boquilla 0.035 / 0.045 / 0.055 (TM Acculock) — L46.00 c/u c/ISV
+  • Difusor (DM-250 A.A.) — L298.01 c/ISV
+  • Tobera/capuchón (N-M1200C A.A.) — L356.50 c/ISV
+
+Sistema 5 — Tipo BINZEL:                                                3 piezas
+  • Boquilla (11-35, igual que M25) — L51.75 c/ISV
+  • Difusor para antorcha BINZEL A.A. — L226.32 c/ISV
+  • Tobera plateada BINZEL A.A. (145-0075) — L336.95 c/ISV
+
+Sistema 6 — Serie HD:                                                   3 piezas
+  • Boquilla HD — ~L92 c/ISV (asesor confirma referencia exacta)
+  • Difusor Gas HD (Miller HD54-16) — L483.00 c/ISV
+  • Tobera/capuchón (HD24-62 WPW) — L603.75 c/ISV
+
+═══════════════════════════════════════
+REGLA "NUNCA DECIR NO HAY" PARA CONSUMIBLES MIG
+═══════════════════════════════════════
+Si el cliente pide un consumible MIG y no estás 100% seguro de que el sistema cae en
+los 6 que manejamos arriba: NO le digas "no manejamos eso" ni "no tenemos". En su
+lugar, redirigílo:
+
+   "Para confirmarle disponibilidad y precio exacto de ese consumible, por favor
+    comuníquese con uno de nuestros asesores al +504 3334-0477."
+
+La razón: el inventario cambia, hay equivalencias entre sistemas, y un asesor humano
+puede revisar stock real y proponer alternativas. Decir "no hay" cierra la venta;
+redirigir mantiene la oportunidad abierta.
 """
 
 SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante',
@@ -1334,7 +1399,11 @@ def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str
 
     product_info = identify_product(image_bytes, mime_type)
 
-    # Consumible MIG → respuesta corta, handoff a asesor humano.
+    # Consumible MIG → handoff a asesor humano:
+    #   1. cliente recibe acuse breve (no engage técnico),
+    #   2. Daniel (+50497041381) recibe la foto + ficha de la conversación
+    #      para que tome la decisión de cuál sistema cotizar y le responda
+    #      al cliente directo desde su WhatsApp (o desde el console).
     if _looks_like_mig_consumable(product_info):
         log_action("VisionAgent", "mig_consumable_handoff", from_number)
         wa_send(
@@ -1342,6 +1411,27 @@ def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str
             "Recibimos su foto 👍 En breve uno de nuestros asesores le confirma la "
             "referencia exacta de ese consumible MIG.",
         )
+        # Reenvío a Daniel para resolución manual.
+        try:
+            wa_forward_image(media_id, DANIEL_PHONE)
+            handoff_note = (
+                "📷 *Foto de consumible MIG recibida*\n"
+                f"Cliente: {from_name or '(sin nombre)'} ({from_number})\n"
+                f"Identificación AI: {product_info[:300]}\n\n"
+                "Sistemas en stock (referencia interna):\n"
+                "1️⃣ Miller serie 169 (4 piezas)\n"
+                "2️⃣ M25 / Magnum 200 (3 piezas)\n"
+                "3️⃣ M250 / Magnum 250 (3 piezas)\n"
+                "4️⃣ MDX Miller nuevo (3 piezas)\n"
+                "5️⃣ Tipo Binzel (3 piezas)\n"
+                "6️⃣ Serie HD (3 piezas)\n\n"
+                "Respondele al cliente directo. (En v11 vas a poder responder "
+                "el número aquí y el bot le manda lista vague + total al cliente.)"
+            )
+            wa_send(DANIEL_PHONE, handoff_note)
+            log_action("VisionAgent", "mig_handoff_forwarded_to_daniel", from_number)
+        except Exception as e:
+            log_action("VisionAgent", "mig_handoff_forward_error", str(e)[:200])
         return
 
     response = f"Identificamos el producto:\n\n{product_info}\n\n¿Cuántas unidades necesita?"
