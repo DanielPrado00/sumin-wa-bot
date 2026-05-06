@@ -867,6 +867,85 @@ def wa_download_image(media_id: str) -> bytes:
     r2 = httpx.get(media_url, headers=headers, timeout=30)
     return r2.content
 
+
+# Audio download is functionally identical to image — just an alias for clarity.
+wa_download_audio = wa_download_image
+
+
+def wa_send_interactive_list(
+    to: str,
+    body_text: str,
+    button_label: str,
+    sections: list[dict],
+    header_text: str | None = None,
+    footer_text: str | None = None,
+) -> dict:
+    """Send a WhatsApp interactive list message.
+
+    `sections` is a list of {"title": str, "rows": [{"id": str, "title": str, "description": str?}]}.
+    WhatsApp limits: button title ≤ 20 chars, row title ≤ 24 chars, row description ≤ 72 chars,
+    up to 10 rows total across all sections.
+    """
+    url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
+    headers = {"Authorization": f"Bearer {WA_TOKEN}", "Content-Type": "application/json"}
+    interactive = {
+        "type": "list",
+        "body": {"text": body_text[:1024]},
+        "action": {"button": button_label[:20], "sections": sections},
+    }
+    if header_text:
+        interactive["header"] = {"type": "text", "text": header_text[:60]}
+    if footer_text:
+        interactive["footer"] = {"text": footer_text[:60]}
+    body = {"messaging_product": "whatsapp", "to": to, "type": "interactive", "interactive": interactive}
+    r = httpx.post(url, json=body, headers=headers, timeout=15)
+    log_action("WA_SEND", f"interactive_list→{to}", button_label)
+    forward_to_console("outbound", to, "", body_text)
+    return r.json()
+
+
+def transcribe_audio_whisper(audio_bytes: bytes, mime_type: str = "audio/ogg") -> str:
+    """Transcribe a WhatsApp voice note via OpenAI Whisper. Returns "" on failure.
+
+    WhatsApp delivers voice notes as audio/ogg (Opus codec). Whisper handles this
+    format natively, no preprocessing required. Cost: ~$0.006/minute.
+    Requires OPENAI_API_KEY env var (set in Render).
+    """
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        log_action("Whisper", "missing_api_key", "OPENAI_API_KEY not set")
+        return ""
+    if not audio_bytes:
+        return ""
+    # Pick a sensible filename suffix matching the mime type so Whisper auto-detects
+    suffix = ".ogg"
+    if "mp4" in mime_type or "m4a" in mime_type:
+        suffix = ".m4a"
+    elif "mpeg" in mime_type or "mp3" in mime_type:
+        suffix = ".mp3"
+    elif "wav" in mime_type:
+        suffix = ".wav"
+    elif "webm" in mime_type:
+        suffix = ".webm"
+    try:
+        files = {"file": (f"audio{suffix}", audio_bytes, mime_type)}
+        data  = {"model": "whisper-1", "language": "es"}
+        r = httpx.post(
+            "https://api.openai.com/v1/audio/transcriptions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            files=files,
+            data=data,
+            timeout=60,
+        )
+        if r.status_code == 200:
+            text = (r.json().get("text") or "").strip()
+            log_action("Whisper", "transcribed", text[:120])
+            return text
+        log_action("Whisper", "error", f"status={r.status_code} body={r.text[:200]}")
+    except Exception as e:
+        log_action("Whisper", "exception", str(e)[:200])
+    return ""
+
 def is_comprobante(image_bytes: bytes, mime_type: str = "image/jpeg") -> bool:
     b64 = base64.standard_b64encode(image_bytes).decode()
     msg = claude.messages.create(
@@ -1523,22 +1602,54 @@ CONFIRM_KEYWORDS = (
 
 
 def _build_confirmation_message(line_items: list[dict], total: float, est_number: str) -> str:
-    """Build the post-PDF confirmation prompt the customer sees."""
+    """Plain-text fallback (used inside the interactive list body, and as a backup
+    if the interactive send fails)."""
     lines_txt = "\n".join(
         f"  {i+1}. {li['quantity']:g} {li.get('unit','UND')} · {li['name']} · "
         f"L{li['rate'] * li['quantity'] * 1.15:,.2f}"
         for i, li in enumerate(line_items)
     )
     return (
-        f"📋 *Por favor confirme los items de la cotización #{est_number}:*\n"
+        f"📋 *Confirme los items — cotización #{est_number}*\n"
         f"{lines_txt}\n"
         f"                                ───────\n"
-        f"                       *Total:* L{total:,.2f}\n\n"
-        f"Respondé:\n"
-        f"  • *✅* o *ok* si está todo correcto\n"
-        f"  • Un *número (1-{len(line_items)})* para corregir ese item\n"
-        f"    (Ej: \"1: cantidad 800\" o solo \"1\" y luego le digo qué corregir)"
+        f"                       *Total:* L{total:,.2f}"
     )
+
+
+def _send_confirmation_prompt(to: str, line_items: list[dict], total: float, est_number: str) -> None:
+    """Send the post-PDF confirmation prompt as a WhatsApp interactive list.
+
+    User taps:
+      • "✅ Todo correcto"            → confirms
+      • "📝 Corregir item N"          → bot asks what to change for item N
+      • "❌ Cancelar / dejar pendiente" → drops the confirmation state
+
+    For multiple corrections in one go, the user can type/audio anything during
+    the list-reply window and confirmation_agent's text path handles it.
+    """
+    body = _build_confirmation_message(line_items, total, est_number)
+    rows = [{"id": "confirm_ok", "title": "✅ Todo correcto"}]
+    for i, li in enumerate(line_items[:8]):  # WA limit: 10 rows total; reserve 2 for actions
+        idx = i + 1
+        title = f"📝 Corregir item {idx}"[:24]
+        descr = f"{li['quantity']:g} {li.get('unit','UND')} · {li['name']}"[:72]
+        rows.append({"id": f"correct_{idx}", "title": title, "description": descr})
+    rows.append({"id": "cancel", "title": "❌ Cancelar"})
+    sections = [{"title": "Acciones", "rows": rows}]
+    try:
+        wa_send_interactive_list(
+            to=to,
+            body_text=body,
+            button_label="Revisar items",
+            sections=sections,
+            header_text=f"Cotización #{est_number}",
+            footer_text="Tapeá una opción o respondé por texto/audio",
+        )
+    except Exception as e:
+        log_action("ConfirmAgent", "interactive_send_error", str(e)[:200])
+        # Fallback to plain text + "Respondé: ..." instructions
+        wa_send(to, body + "\n\nRespondé:\n  • *✅* si está todo correcto\n  • Número 1-N para corregir")
 
 
 def _save_pending_confirmation(meta: dict, *, estimate_id: str, estimate_number: str,
@@ -1566,19 +1677,24 @@ def _confirmation_expired(pc: dict) -> bool:
         return True
 
 
-def _parse_confirmation_response(text: str, items_count: int) -> dict:
-    """Parse the user's reply into an action. Uses Claude Haiku for flexibility.
+def _parse_confirmation_response(text: str, items: list[dict]) -> dict:
+    """Parse the user's reply into an action structure that supports multiple
+    corrections in one message ("el 6011 eran 800 y el 800 eran 200" → 2 corrections).
 
-    Returns dict like:
+    Returns one of:
       {"action": "confirm"}
+      {"action": "cancel"}
       {"action": "ask_what_to_change", "item_index": N}
-      {"action": "correct", "item_index": N, "field": "quantity", "new_value": 800}
+      {"action": "corrections", "corrections": [{"item_index": N, "field": "quantity"|"product", "new_value": ...}, ...]}
       {"action": "ambiguous"}
+
+    `items` is the current list of line_items (used so the LLM can match products
+    by name like "el 6011" → item index whose name contains "6011").
     """
     t = (text or "").strip().lower()
+    items_count = len(items)
     # Fast path 1: explicit confirm keywords
     if any(k in t for k in CONFIRM_KEYWORDS):
-        # avoid false positive "no está bien" → check for negation nearby
         if "no" not in t.split()[:3]:
             return {"action": "confirm"}
     # Fast path 2: bare digit "1" / "el 2" / "item 3"
@@ -1587,31 +1703,47 @@ def _parse_confirmation_response(text: str, items_count: int) -> dict:
         idx = int(m.group(1))
         if 1 <= idx <= items_count:
             return {"action": "ask_what_to_change", "item_index": idx}
-    # LLM fallback for "1: cantidad 800" / "el 6011 era 800" / etc.
+    # Fast path 3: "cancel" / "cancelar" / "dejar pendiente"
+    if any(k in t for k in ("cancelar", "cancel", "dejar pendiente", "después", "luego")):
+        return {"action": "cancel"}
+    # LLM fallback — supports multi-correction in one message
+    items_brief = "\n".join(
+        f"  {i+1}. {li.get('quantity', '?'):g} {li.get('unit') or 'UND'} · {li.get('name', '')}"
+        for i, li in enumerate(items)
+    )
     prompt = (
-        f"El usuario está respondiendo a una confirmación de cotización con {items_count} "
-        f"items numerados del 1 al {items_count}.\n\n"
+        f"El usuario está respondiendo a una confirmación de cotización. Items actuales:\n"
+        f"{items_brief}\n\n"
         f"Mensaje del usuario: \"{text}\"\n\n"
-        f"Devolvé EN JSON puro (sin markdown) UNA de estas acciones:\n"
-        f'  {{"action":"confirm"}} — si el usuario aprueba (ok/sí/todo bien/perfecto/✅)\n'
-        f'  {{"action":"ask_what_to_change","item_index":N}} — si menciona un número '
-        f"sin decir qué cambiar\n"
-        f'  {{"action":"correct","item_index":N,"field":"quantity","new_value":<num>}} — '
-        f"si pide cambiar la cantidad de un item específico\n"
-        f'  {{"action":"correct","item_index":N,"field":"product","new_value":"<str>"}} — '
-        f"si pide cambiar el producto/diámetro\n"
-        f'  {{"action":"ambiguous"}} — si no podés interpretar\n\n'
+        f"Devolvé JSON puro (sin markdown). UNA de estas formas:\n"
+        f'  {{"action":"confirm"}} — usuario aprueba (ok/sí/todo bien/perfecto/✅)\n'
+        f'  {{"action":"cancel"}} — usuario quiere cancelar/dejar pendiente\n'
+        f'  {{"action":"ask_what_to_change","item_index":N}} — menciona un número sin decir qué\n'
+        f'  {{"action":"corrections","corrections":[{{...}},{{...}}]}} — '
+        f"una o más correcciones, donde cada una es:\n"
+        f'    {{"item_index":N, "field":"quantity"|"product", "new_value":<num o str>}}\n'
+        f'  {{"action":"ambiguous"}} — no podés interpretar\n\n'
+        f"Reglas:\n"
+        f"- Si el usuario menciona un producto por nombre (\"el 6011\", \"el 309\"), buscalo en\n"
+        f"  los items y devolvé el item_index correcto (1-{items_count}).\n"
+        f"- Múltiples correcciones en un solo mensaje: devolvé TODAS en \"corrections\".\n"
+        f"- Si el usuario corrige cantidad: field=\"quantity\", new_value es número.\n"
+        f"- Si corrige producto/diámetro: field=\"product\", new_value es string.\n\n"
         f"Ejemplos:\n"
-        f'  "1: cantidad 800" → {{"action":"correct","item_index":1,"field":"quantity","new_value":800}}\n'
-        f'  "el 3 eran 200 libras" → {{"action":"correct","item_index":3,"field":"quantity","new_value":200}}\n'
-        f'  "el 1 era 7018 no 6011" → {{"action":"correct","item_index":1,"field":"product","new_value":"7018"}}\n'
-        f'  "todo bien" → {{"action":"confirm"}}'
+        f'  "el 6011 eran 800 y el 800 eran 200" →\n'
+        f'    {{"action":"corrections","corrections":[\n'
+        f'       {{"item_index":<idx_6011>, "field":"quantity", "new_value":800}},\n'
+        f'       {{"item_index":<idx_800>, "field":"quantity", "new_value":200}}\n'
+        f"     ]}}\n"
+        f'  "1: cantidad 800" → corrections con un solo item\n'
+        f'  "todo bien" → confirm\n'
+        f'  "cancela / dejar pendiente" → cancel'
     )
     try:
         msg = claude.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=200,
-            system="Sos un parser estructurado de respuestas. Devolvés solo JSON.",
+            max_tokens=400,
+            system="Sos un parser estructurado de respuestas. Devolvés solo JSON puro.",
             messages=[{"role": "user", "content": prompt}],
         )
         raw = msg.content[0].text.strip()
@@ -1625,8 +1757,77 @@ def _parse_confirmation_response(text: str, items_count: int) -> dict:
     return {"action": "ambiguous"}
 
 
-def confirmation_agent(from_number: str, from_name: str, text: str, state: dict) -> None:
-    """Handle the user's reply to a post-PDF confirmation prompt."""
+def _apply_one_correction(pc: dict, correction: dict) -> tuple[bool, str]:
+    """Apply a single correction (item_index + field + new_value) to pc['line_items'].
+    Returns (ok, error_msg). Mutates pc in place."""
+    try:
+        idx = int(correction.get("item_index", 0))
+    except Exception:
+        return False, "item_index inválido"
+    field = correction.get("field", "")
+    new_value = correction.get("new_value")
+    if not (1 <= idx <= len(pc["line_items"])) or field not in {"quantity", "product"}:
+        return False, f"item_index {idx} fuera de rango o field inválido"
+    li = pc["line_items"][idx - 1]
+    if field == "quantity":
+        try:
+            qty = float(str(new_value).replace(",", ""))
+        except Exception:
+            return False, f"cantidad inválida para item {idx}: {new_value!r}"
+        li["quantity"] = qty
+    else:
+        new_items, _ = extract_items_for_quote(f"cotice 1 de {new_value}", [])
+        if not new_items:
+            return False, f"no encontré '{new_value}' en el catálogo"
+        ni = new_items[0]
+        li["item_id"] = ni.get("item_id", li.get("item_id"))
+        li["name"]    = ni.get("name", li.get("name"))
+        li["rate"]    = ni.get("rate", li.get("rate"))
+        li["unit"]    = ni.get("unit", li.get("unit"))
+    return True, ""
+
+
+def _push_corrections_to_zoho_and_resend(
+    from_number: str, pc: dict, meta: dict, state: dict,
+) -> None:
+    """Common tail for after one or more corrections were applied to pc['line_items']:
+    push to Zoho, refresh expiry, resend PDF, resend confirmation prompt."""
+    upd = zoho_update_estimate(pc["estimate_id"], pc["customer_id"], pc["line_items"])
+    if not upd:
+        wa_send(from_number,
+                f"No pude actualizar la cotización automáticamente. Por favor llame a "
+                f"{ELECTRODE_REDIRECT_PHONE_HUMAN}.")
+        meta.pop("pending_confirmation", None)
+        save_state(state)
+        return
+    new_total = float(upd.get("total", 0))
+    pc["total"] = new_total
+    pc["awaiting_field_for_item"] = None
+    from datetime import timedelta
+    pc["expires_at"] = (datetime.now() + timedelta(minutes=CONFIRMATION_TTL_MIN)).isoformat()
+    pdf_bytes = zoho_get_estimate_pdf(pc["estimate_id"])
+    if pdf_bytes:
+        wa_send_document(
+            from_number, pdf_bytes,
+            f"Cotizacion_SUMIN_{pc['estimate_number']}_corregida.pdf",
+            f"Cotización #{pc['estimate_number']} (corregida) — SUMIN",
+        )
+    _send_confirmation_prompt(from_number, pc["line_items"], new_total, pc["estimate_number"])
+    save_state(state)
+
+
+def confirmation_agent(
+    from_number: str, from_name: str, text: str, state: dict,
+    *, list_reply_id: str | None = None,
+) -> None:
+    """Handle the user's reply to a post-PDF confirmation prompt.
+
+    Two entry-points:
+      1. List reply (user tapped a row in the interactive list) — `list_reply_id`
+         is set, `text` contains the row title (we ignore it and use the id).
+      2. Plain text or transcribed audio — `list_reply_id` is None, `text` has
+         the user's message; the parser extracts confirm/cancel/correct(s).
+    """
     meta = get_conv_meta(state, from_number)
     pc = meta.get("pending_confirmation")
     if not pc:
@@ -1636,18 +1837,51 @@ def confirmation_agent(from_number: str, from_name: str, text: str, state: dict)
         save_state(state)
         return
 
-    # If we previously asked "what do you want to change for item N?", parse free-form
+    items_count = len(pc["line_items"])
+
+    # ─── List-reply path: structured ID dispatch ──────────────────────────
+    if list_reply_id:
+        log_action("ConfirmAgent", f"list_reply={list_reply_id}", "")
+        if list_reply_id == "confirm_ok":
+            wa_send(from_number, "Perfecto, cotización confirmada ✅ Gracias!")
+            meta.pop("pending_confirmation", None)
+            save_state(state)
+            return
+        if list_reply_id == "cancel":
+            wa_send(from_number, "Listo, cotización dejada en pendiente. Si querés retomar, escribime.")
+            meta.pop("pending_confirmation", None)
+            save_state(state)
+            return
+        m = re.fullmatch(r"correct_(\d+)", list_reply_id)
+        if m:
+            idx = int(m.group(1))
+            if not 1 <= idx <= items_count:
+                wa_send(from_number, f"Solo hay items del 1 al {items_count}.")
+                return
+            li = pc["line_items"][idx - 1]
+            pc["awaiting_field_for_item"] = idx
+            save_state(state)
+            wa_send(
+                from_number,
+                f"*Item {idx}*: {li['quantity']:g} {li.get('unit','UND')} · {li['name']}\n\n"
+                f"¿Qué corregís? Podés escribir o mandarme nota de voz. "
+                f"Ej: \"cantidad 800\", \"producto 6013 1/8\".",
+            )
+            return
+        # Unknown id — fall through to text path
+        text = list_reply_id
+
+    # ─── Text/audio path ──────────────────────────────────────────────────
     awaiting_idx = pc.get("awaiting_field_for_item")
     if awaiting_idx:
-        # User is now telling us what to change. Build a synthetic message that
-        # the LLM parser can resolve as a "correct" action for that item.
         synth = f"el {awaiting_idx}: {text}"
-        action = _parse_confirmation_response(synth, len(pc["line_items"]))
-        # Force the correct item index in case parser drifted
-        if action.get("action") == "correct":
-            action["item_index"] = awaiting_idx
+        action = _parse_confirmation_response(synth, pc["line_items"])
+        # Force item_index for any single correction returned
+        if action.get("action") == "corrections":
+            for c in action.get("corrections", []):
+                c["item_index"] = awaiting_idx
     else:
-        action = _parse_confirmation_response(text, len(pc["line_items"]))
+        action = _parse_confirmation_response(text, pc["line_items"])
 
     act = action.get("action", "ambiguous")
     log_action("ConfirmAgent", f"action={act}", text[:80])
@@ -1658,10 +1892,16 @@ def confirmation_agent(from_number: str, from_name: str, text: str, state: dict)
         save_state(state)
         return
 
+    if act == "cancel":
+        wa_send(from_number, "Listo, cotización dejada en pendiente. Si querés retomar, escribime.")
+        meta.pop("pending_confirmation", None)
+        save_state(state)
+        return
+
     if act == "ask_what_to_change":
         idx = int(action["item_index"])
-        if not 1 <= idx <= len(pc["line_items"]):
-            wa_send(from_number, f"Solo hay items del 1 al {len(pc['line_items'])}. ¿Cuál querés corregir?")
+        if not 1 <= idx <= items_count:
+            wa_send(from_number, f"Solo hay items del 1 al {items_count}. ¿Cuál querés corregir?")
             return
         li = pc["line_items"][idx - 1]
         pc["awaiting_field_for_item"] = idx
@@ -1669,61 +1909,36 @@ def confirmation_agent(from_number: str, from_name: str, text: str, state: dict)
         wa_send(
             from_number,
             f"*Item {idx}*: {li['quantity']:g} {li.get('unit','UND')} · {li['name']}\n\n"
-            f"¿Qué corregís? Ej: \"cantidad 800\", \"producto 6013 1/8\", o el cambio completo en una línea.",
+            f"¿Qué corregís? Podés escribir o mandar nota de voz. "
+            f"Ej: \"cantidad 800\", \"producto 6013 1/8\".",
         )
         return
 
-    if act == "correct":
-        idx = int(action.get("item_index", 0))
-        field = action.get("field", "")
-        new_value = action.get("new_value")
-        if not (1 <= idx <= len(pc["line_items"])) or field not in {"quantity", "product"}:
-            wa_send(from_number, "No entendí qué corregir. Intentá: \"1: cantidad 800\" o solo \"1\".")
+    if act == "corrections":
+        corrections = action.get("corrections") or []
+        if not corrections:
+            wa_send(from_number, "No detecté correcciones en tu mensaje. ¿Podés indicarme qué item y qué cambio?")
             return
-        li = pc["line_items"][idx - 1]
-        if field == "quantity":
-            try:
-                qty = float(str(new_value).replace(",", ""))
-            except Exception:
-                wa_send(from_number, "No entendí la cantidad. ¿Podés escribir solo el número? Ej: \"800\".")
-                return
-            li["quantity"] = qty
-        else:  # product — reuse extract_items_for_quote logic via simple search
-            # For v13a we keep this simple: if user types a product, we run a single-item
-            # extraction and replace name/item_id/rate/unit if found.
-            new_items, _ = extract_items_for_quote(f"cotice 1 de {new_value}", [])
-            if not new_items:
-                wa_send(from_number, f"No encontré '{new_value}' en el catálogo. Probá con otra descripción o redirigí a {ELECTRODE_REDIRECT_PHONE_HUMAN}.")
-                return
-            ni = new_items[0]
-            li["item_id"] = ni.get("item_id", li.get("item_id"))
-            li["name"]    = ni.get("name", li.get("name"))
-            li["rate"]    = ni.get("rate", li.get("rate"))
-            li["unit"]    = ni.get("unit", li.get("unit"))
-        # Push update to Zoho
-        wa_send(from_number, "Aplicando corrección y regenerando PDF...")
-        upd = zoho_update_estimate(pc["estimate_id"], pc["customer_id"], pc["line_items"])
-        if not upd:
-            wa_send(from_number, f"No pude actualizar la cotización automáticamente. Por favor llame a {ELECTRODE_REDIRECT_PHONE_HUMAN}.")
-            meta.pop("pending_confirmation", None)
-            save_state(state)
-            return
-        new_total = float(upd.get("total", 0))
-        pc["total"] = new_total
-        pc["awaiting_field_for_item"] = None
-        # Refresh expiry on each correction
-        from datetime import timedelta
-        pc["expires_at"] = (datetime.now() + timedelta(minutes=CONFIRMATION_TTL_MIN)).isoformat()
-        # Send updated PDF
-        pdf_bytes = zoho_get_estimate_pdf(pc["estimate_id"])
-        if pdf_bytes:
-            wa_send_document(
-                from_number, pdf_bytes,
-                f"Cotizacion_SUMIN_{pc['estimate_number']}_corregida.pdf",
-                f"Cotización #{pc['estimate_number']} (corregida) — SUMIN",
+        applied = 0
+        errors  = []
+        for c in corrections:
+            ok, err = _apply_one_correction(pc, c)
+            if ok:
+                applied += 1
+            else:
+                errors.append(err)
+        if applied == 0:
+            wa_send(
+                from_number,
+                "No pude aplicar las correcciones: " + "; ".join(errors[:3]) +
+                f". Llame al {ELECTRODE_REDIRECT_PHONE_HUMAN} si esto sigue fallando.",
             )
-        wa_send(from_number, _build_confirmation_message(pc["line_items"], new_total, pc["estimate_number"]))
-        save_state(state)
+            return
+        msg = f"Aplicando {applied} correcci" + ("ones" if applied > 1 else "ón") + " y regenerando PDF..."
+        if errors:
+            msg += f"\n(Algunas no se pudieron aplicar: {'; '.join(errors[:2])})"
+        wa_send(from_number, msg)
+        _push_corrections_to_zoho_and_resend(from_number, pc, meta, state)
         return
 
     # Ambiguous
@@ -2557,7 +2772,7 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
             line_items=line_items,
             total=total,
         )
-        wa_send(from_number, _build_confirmation_message(line_items, total, est_number))
+        _send_confirmation_prompt(from_number, line_items, total, est_number)
 
     if from_name and from_name != from_number:
         meta["name"] = from_name
@@ -2610,6 +2825,45 @@ def orchestrate(message_data: dict):
         mime_type = message_data.get("image", {}).get("mime_type", "image/jpeg")
         vision_agent(from_number, from_name, media_id, mime_type, state)
         return
+
+    # ─── INTERACTIVE (list-reply taps from confirmation prompt) ──────────────
+    if msg_type == "interactive":
+        interactive = message_data.get("interactive", {}) or {}
+        if interactive.get("type") == "list_reply":
+            list_reply = interactive.get("list_reply", {}) or {}
+            row_id = list_reply.get("id", "")
+            row_title = list_reply.get("title", "")
+            log_action("Orchestrator", "list_reply_received", f"id={row_id}")
+            _meta_check = get_conv_meta(state, from_number)
+            if _meta_check.get("pending_confirmation"):
+                confirmation_agent(from_number, from_name, row_title, state, list_reply_id=row_id)
+            return
+        # Other interactive types (button_reply etc.) — fall through silently for now
+        return
+
+    # ─── AUDIO (voice notes — transcribe via Whisper, route as text) ─────────
+    if msg_type == "audio":
+        audio_obj = message_data.get("audio", {}) or {}
+        media_id  = audio_obj.get("id", "")
+        mime_type = audio_obj.get("mime_type", "audio/ogg")
+        if not media_id:
+            return
+        log_action("Orchestrator", "audio_received", f"media={media_id} mime={mime_type}")
+        audio_bytes = wa_download_audio(media_id)
+        transcript = transcribe_audio_whisper(audio_bytes, mime_type) if audio_bytes else ""
+        if not transcript:
+            wa_send(
+                from_number,
+                "No pude entender la nota de voz 🎙️ ¿Podés escribirlo o reenviar el audio?",
+            )
+            return
+        log_action("Orchestrator", "audio_transcript", transcript[:120])
+        # Route the transcript as if it were a text message — re-enter the text branch
+        # by mutating message_data and falling through.
+        message_data["type"] = "text"
+        message_data["text"] = {"body": transcript}
+        msg_type = "text"
+        # fall through to the text branch below
 
     if msg_type == "text":
         text = message_data.get("text", {}).get("body", "")
