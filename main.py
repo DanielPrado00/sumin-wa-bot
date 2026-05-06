@@ -1507,6 +1507,233 @@ def _quantity_question_for_product(product_info: str) -> str:
     return "¿Cuántas unidades necesita?"
 
 
+# ════════════════════════════════════════════════════════════════════════════════
+# ─── POST-COTIZACIÓN: CONFIRMACIÓN / CORRECCIÓN ──────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════════
+# Después de un direct-send (bypass para trusted users) el bot pregunta al
+# usuario si los items están bien. Si el usuario corrige cantidades o productos,
+# el bot actualiza el estimate en Zoho y manda PDF nuevo.
+
+CONFIRMATION_TTL_MIN = 30   # minutos vigentes después de mandar PDF
+CONFIRM_KEYWORDS = (
+    "✅", "ok", "okay", "todo bien", "todo correcto", "correcto",
+    "confirmo", "confirmado", "está bien", "esta bien", "perfecto",
+    "sí", "si", "yes", "👍",
+)
+
+
+def _build_confirmation_message(line_items: list[dict], total: float, est_number: str) -> str:
+    """Build the post-PDF confirmation prompt the customer sees."""
+    lines_txt = "\n".join(
+        f"  {i+1}. {li['quantity']:g} {li.get('unit','UND')} · {li['name']} · "
+        f"L{li['rate'] * li['quantity'] * 1.15:,.2f}"
+        for i, li in enumerate(line_items)
+    )
+    return (
+        f"📋 *Por favor confirme los items de la cotización #{est_number}:*\n"
+        f"{lines_txt}\n"
+        f"                                ───────\n"
+        f"                       *Total:* L{total:,.2f}\n\n"
+        f"Respondé:\n"
+        f"  • *✅* o *ok* si está todo correcto\n"
+        f"  • Un *número (1-{len(line_items)})* para corregir ese item\n"
+        f"    (Ej: \"1: cantidad 800\" o solo \"1\" y luego le digo qué corregir)"
+    )
+
+
+def _save_pending_confirmation(meta: dict, *, estimate_id: str, estimate_number: str,
+                                customer_id: str, customer_name: str,
+                                line_items: list[dict], total: float) -> None:
+    """Snapshot the just-sent quote in conv_meta so a subsequent message can
+    correct it. Expires after CONFIRMATION_TTL_MIN minutes."""
+    from datetime import timedelta
+    meta["pending_confirmation"] = {
+        "estimate_id":     estimate_id,
+        "estimate_number": estimate_number,
+        "customer_id":     customer_id,
+        "customer_name":   customer_name,
+        "line_items":      [dict(li) for li in line_items],
+        "total":           total,
+        "expires_at":      (datetime.now() + timedelta(minutes=CONFIRMATION_TTL_MIN)).isoformat(),
+        "awaiting_field_for_item": None,  # set to N when user replied "N" alone
+    }
+
+
+def _confirmation_expired(pc: dict) -> bool:
+    try:
+        return datetime.fromisoformat(pc["expires_at"]) < datetime.now()
+    except Exception:
+        return True
+
+
+def _parse_confirmation_response(text: str, items_count: int) -> dict:
+    """Parse the user's reply into an action. Uses Claude Haiku for flexibility.
+
+    Returns dict like:
+      {"action": "confirm"}
+      {"action": "ask_what_to_change", "item_index": N}
+      {"action": "correct", "item_index": N, "field": "quantity", "new_value": 800}
+      {"action": "ambiguous"}
+    """
+    t = (text or "").strip().lower()
+    # Fast path 1: explicit confirm keywords
+    if any(k in t for k in CONFIRM_KEYWORDS):
+        # avoid false positive "no está bien" → check for negation nearby
+        if "no" not in t.split()[:3]:
+            return {"action": "confirm"}
+    # Fast path 2: bare digit "1" / "el 2" / "item 3"
+    m = re.fullmatch(r"\s*(?:item\s+|el\s+)?(\d+)\s*", t)
+    if m:
+        idx = int(m.group(1))
+        if 1 <= idx <= items_count:
+            return {"action": "ask_what_to_change", "item_index": idx}
+    # LLM fallback for "1: cantidad 800" / "el 6011 era 800" / etc.
+    prompt = (
+        f"El usuario está respondiendo a una confirmación de cotización con {items_count} "
+        f"items numerados del 1 al {items_count}.\n\n"
+        f"Mensaje del usuario: \"{text}\"\n\n"
+        f"Devolvé EN JSON puro (sin markdown) UNA de estas acciones:\n"
+        f'  {{"action":"confirm"}} — si el usuario aprueba (ok/sí/todo bien/perfecto/✅)\n'
+        f'  {{"action":"ask_what_to_change","item_index":N}} — si menciona un número '
+        f"sin decir qué cambiar\n"
+        f'  {{"action":"correct","item_index":N,"field":"quantity","new_value":<num>}} — '
+        f"si pide cambiar la cantidad de un item específico\n"
+        f'  {{"action":"correct","item_index":N,"field":"product","new_value":"<str>"}} — '
+        f"si pide cambiar el producto/diámetro\n"
+        f'  {{"action":"ambiguous"}} — si no podés interpretar\n\n'
+        f"Ejemplos:\n"
+        f'  "1: cantidad 800" → {{"action":"correct","item_index":1,"field":"quantity","new_value":800}}\n'
+        f'  "el 3 eran 200 libras" → {{"action":"correct","item_index":3,"field":"quantity","new_value":200}}\n'
+        f'  "el 1 era 7018 no 6011" → {{"action":"correct","item_index":1,"field":"product","new_value":"7018"}}\n'
+        f'  "todo bien" → {{"action":"confirm"}}'
+    )
+    try:
+        msg = claude.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=200,
+            system="Sos un parser estructurado de respuestas. Devolvés solo JSON.",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = msg.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
+        data = json.loads(raw)
+        if isinstance(data, dict) and "action" in data:
+            return data
+    except Exception as e:
+        log_action("ConfirmAgent", "parse_error", str(e)[:200])
+    return {"action": "ambiguous"}
+
+
+def confirmation_agent(from_number: str, from_name: str, text: str, state: dict) -> None:
+    """Handle the user's reply to a post-PDF confirmation prompt."""
+    meta = get_conv_meta(state, from_number)
+    pc = meta.get("pending_confirmation")
+    if not pc:
+        return
+    if _confirmation_expired(pc):
+        meta.pop("pending_confirmation", None)
+        save_state(state)
+        return
+
+    # If we previously asked "what do you want to change for item N?", parse free-form
+    awaiting_idx = pc.get("awaiting_field_for_item")
+    if awaiting_idx:
+        # User is now telling us what to change. Build a synthetic message that
+        # the LLM parser can resolve as a "correct" action for that item.
+        synth = f"el {awaiting_idx}: {text}"
+        action = _parse_confirmation_response(synth, len(pc["line_items"]))
+        # Force the correct item index in case parser drifted
+        if action.get("action") == "correct":
+            action["item_index"] = awaiting_idx
+    else:
+        action = _parse_confirmation_response(text, len(pc["line_items"]))
+
+    act = action.get("action", "ambiguous")
+    log_action("ConfirmAgent", f"action={act}", text[:80])
+
+    if act == "confirm":
+        wa_send(from_number, "Perfecto, cotización confirmada ✅ Gracias!")
+        meta.pop("pending_confirmation", None)
+        save_state(state)
+        return
+
+    if act == "ask_what_to_change":
+        idx = int(action["item_index"])
+        if not 1 <= idx <= len(pc["line_items"]):
+            wa_send(from_number, f"Solo hay items del 1 al {len(pc['line_items'])}. ¿Cuál querés corregir?")
+            return
+        li = pc["line_items"][idx - 1]
+        pc["awaiting_field_for_item"] = idx
+        save_state(state)
+        wa_send(
+            from_number,
+            f"*Item {idx}*: {li['quantity']:g} {li.get('unit','UND')} · {li['name']}\n\n"
+            f"¿Qué corregís? Ej: \"cantidad 800\", \"producto 6013 1/8\", o el cambio completo en una línea.",
+        )
+        return
+
+    if act == "correct":
+        idx = int(action.get("item_index", 0))
+        field = action.get("field", "")
+        new_value = action.get("new_value")
+        if not (1 <= idx <= len(pc["line_items"])) or field not in {"quantity", "product"}:
+            wa_send(from_number, "No entendí qué corregir. Intentá: \"1: cantidad 800\" o solo \"1\".")
+            return
+        li = pc["line_items"][idx - 1]
+        if field == "quantity":
+            try:
+                qty = float(str(new_value).replace(",", ""))
+            except Exception:
+                wa_send(from_number, "No entendí la cantidad. ¿Podés escribir solo el número? Ej: \"800\".")
+                return
+            li["quantity"] = qty
+        else:  # product — reuse extract_items_for_quote logic via simple search
+            # For v13a we keep this simple: if user types a product, we run a single-item
+            # extraction and replace name/item_id/rate/unit if found.
+            new_items, _ = extract_items_for_quote(f"cotice 1 de {new_value}", [])
+            if not new_items:
+                wa_send(from_number, f"No encontré '{new_value}' en el catálogo. Probá con otra descripción o redirigí a {ELECTRODE_REDIRECT_PHONE_HUMAN}.")
+                return
+            ni = new_items[0]
+            li["item_id"] = ni.get("item_id", li.get("item_id"))
+            li["name"]    = ni.get("name", li.get("name"))
+            li["rate"]    = ni.get("rate", li.get("rate"))
+            li["unit"]    = ni.get("unit", li.get("unit"))
+        # Push update to Zoho
+        wa_send(from_number, "Aplicando corrección y regenerando PDF...")
+        upd = zoho_update_estimate(pc["estimate_id"], pc["customer_id"], pc["line_items"])
+        if not upd:
+            wa_send(from_number, f"No pude actualizar la cotización automáticamente. Por favor llame a {ELECTRODE_REDIRECT_PHONE_HUMAN}.")
+            meta.pop("pending_confirmation", None)
+            save_state(state)
+            return
+        new_total = float(upd.get("total", 0))
+        pc["total"] = new_total
+        pc["awaiting_field_for_item"] = None
+        # Refresh expiry on each correction
+        from datetime import timedelta
+        pc["expires_at"] = (datetime.now() + timedelta(minutes=CONFIRMATION_TTL_MIN)).isoformat()
+        # Send updated PDF
+        pdf_bytes = zoho_get_estimate_pdf(pc["estimate_id"])
+        if pdf_bytes:
+            wa_send_document(
+                from_number, pdf_bytes,
+                f"Cotizacion_SUMIN_{pc['estimate_number']}_corregida.pdf",
+                f"Cotización #{pc['estimate_number']} (corregida) — SUMIN",
+            )
+        wa_send(from_number, _build_confirmation_message(pc["line_items"], new_total, pc["estimate_number"]))
+        save_state(state)
+        return
+
+    # Ambiguous
+    wa_send(
+        from_number,
+        "No entendí. Respondé con *✅* si todo está bien, o con un número (1-"
+        f"{len(pc['line_items'])}) seguido del cambio (ej: \"1: cantidad 800\").",
+    )
+
+
 def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str, state: dict):
     log_action("VisionAgent", "processing_image", f"{from_name} sent image")
     image_bytes = wa_download_image(media_id)
@@ -1933,6 +2160,42 @@ def zoho_create_estimate(customer_name: str, customer_phone: str, line_items: li
     return None
 
 
+def zoho_update_estimate(estimate_id: str, customer_id: str, line_items: list[dict]) -> dict | None:
+    """Update an existing Zoho estimate's line_items. Returns the updated estimate
+    on success, None on failure. Used by the post-quote confirmation flow when a
+    trusted user corrects the items before final delivery."""
+    token = get_zoho_access_token()
+    if not token or not ZOHO_ORG_ID or not estimate_id:
+        return None
+    formatted = [
+        {"item_id": li["item_id"], "name": li["name"], "quantity": li["quantity"],
+         "rate": li["rate"], "unit": li.get("unit", "")}
+        for li in line_items
+    ]
+    payload = {
+        "customer_id": customer_id,
+        "line_items":  formatted,
+    }
+    try:
+        r = httpx.put(
+            f"https://www.zohoapis.com/books/v3/estimates/{estimate_id}",
+            params={"organization_id": ZOHO_ORG_ID},
+            headers={"Authorization": f"Zoho-oauthtoken {token}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=15,
+        )
+        if r.status_code == 200:
+            est = r.json().get("estimate", {})
+            log_action("ZohoAPI", "estimate_updated",
+                       f"#{est.get('estimate_number')} items={len(formatted)}")
+            return est
+        log_action("ZohoAPI", "estimate_update_error",
+                   f"status={r.status_code} body={r.text[:300]}")
+    except Exception as e:
+        log_action("ZohoAPI", "estimate_update_exception", str(e))
+    return None
+
+
 def zoho_get_estimate_pdf(estimate_id: str) -> bytes | None:
     token = get_zoho_access_token()
     if not token or not ZOHO_ORG_ID:
@@ -2270,6 +2533,22 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                 f"(No se pudo generar el PDF automáticamente. "
                 f"Su cotización #{est_number} está registrada en nuestro sistema.)")
 
+    # Post-confirmación: snapshot del quote y prompt al usuario para validar/corregir
+    # antes de cerrar. Si algo está mal (cantidades mal leídas en OCR, producto
+    # incorrecto), corrige acá y el bot actualiza Zoho + manda PDF nuevo.
+    zoho_customer_id = estimate.get("customer_id", "") if isinstance(estimate, dict) else ""
+    if zoho_customer_id:
+        _save_pending_confirmation(
+            meta,
+            estimate_id=est_id,
+            estimate_number=est_number,
+            customer_id=zoho_customer_id,
+            customer_name=customer_name,
+            line_items=line_items,
+            total=total,
+        )
+        wa_send(from_number, _build_confirmation_message(line_items, total, est_number))
+
     if from_name and from_name != from_number:
         meta["name"] = from_name
     meta["last_active"] = datetime.now().isoformat()
@@ -2329,9 +2608,22 @@ def orchestrate(message_data: dict):
             log_action("Orchestrator", "skipped_zoho_code", text)
             return
 
+        # If a quote was just sent and is awaiting confirmation/correction by
+        # the user, route there first — UNLESS the user is starting a brand new
+        # cotización (in which case we abandon the old confirmation).
+        _meta_check = get_conv_meta(state, from_number)
+        _pc = _meta_check.get("pending_confirmation")
+        if _pc and not _confirmation_expired(_pc) and not detect_quote_request(text):
+            log_action("Orchestrator", "routed_pending_confirmation", from_number)
+            confirmation_agent(from_number, from_name, text, state)
+            return
+        elif _pc and detect_quote_request(text):
+            # User abandons the previous confirmation by starting a new quote
+            _meta_check.pop("pending_confirmation", None)
+            save_state(state)
+
         # If there's a pending quote awaiting customer-name confirmation,
         # route this message to quote_agent regardless of detect_quote_request.
-        _meta_check = get_conv_meta(state, from_number)
         if _meta_check.get("pending_quote"):
             log_action("Orchestrator", "routed_pending_quote", from_number)
             quote_agent(from_number, from_name, text, state)
