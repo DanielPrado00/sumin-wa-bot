@@ -1936,6 +1936,16 @@ def detect_quote_request(text: str) -> bool:
     return False
 
 
+def _explicit_new_quote_request(text: str) -> bool:
+    """Stricter than `detect_quote_request` — TRUE only for explicit trigger
+    phrases ("cotice", "cotización", "presupuesto", etc.), NOT for quantity+unit
+    patterns alone. Used during a `pending_confirmation` window to decide
+    whether the user is abandoning the prior cotización to start a new one,
+    versus just correcting an item with a phrase like "el 6011 eran 800 lbs".
+    """
+    return any(kw in (text or "").lower() for kw in QUOTE_TRIGGERS)
+
+
 def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
     """Extract products, quantities, unit of measure, and customer/company name.
 
@@ -2610,14 +2620,16 @@ def orchestrate(message_data: dict):
 
         # If a quote was just sent and is awaiting confirmation/correction by
         # the user, route there first — UNLESS the user is starting a brand new
-        # cotización (in which case we abandon the old confirmation).
+        # cotización with an EXPLICIT trigger word (cotice / cotización / etc).
+        # We do NOT abandon on quantity-only patterns ("el 6011 eran 800 lbs"),
+        # because those are corrections to the existing cotización, not new quotes.
         _meta_check = get_conv_meta(state, from_number)
         _pc = _meta_check.get("pending_confirmation")
-        if _pc and not _confirmation_expired(_pc) and not detect_quote_request(text):
+        if _pc and not _confirmation_expired(_pc) and not _explicit_new_quote_request(text):
             log_action("Orchestrator", "routed_pending_confirmation", from_number)
             confirmation_agent(from_number, from_name, text, state)
             return
-        elif _pc and detect_quote_request(text):
+        elif _pc and _explicit_new_quote_request(text):
             # User abandons the previous confirmation by starting a new quote
             _meta_check.pop("pending_confirmation", None)
             save_state(state)
