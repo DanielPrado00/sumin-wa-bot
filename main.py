@@ -933,10 +933,19 @@ def try_extract_order_from_image(image_bytes: bytes, mime_type: str = "image/jpe
         "- al lado dice 'no comprar', 'no', 'X', 'cancelar', 'omitir',\n"
         "- al lado dice 'S/STOCK', 'sin stock', 'fuera de stock', 'no hay',\n"
         "- tiene un check ✓ que indica 'ya pedido / ya entregado'.\n\n"
-        "PRODUCTOS típicos: electrodos (6011, 6013, 7018, 309-16, 7018-1, 800/INCONEL, "
-        "etc.), alambre MIG/TIG, varillas, discos abrasivos, caretas, guantes, gas. "
-        "Si una línea es ambigua, igual ponela en items con el texto que mejor leas + "
-        "agregale ' [verificar]' al final del product.\n\n"
+        "PRODUCTOS típicos: electrodos (6011, 6013, 7018, 309-16, 7018-1, 7024, "
+        "INCONEL/E NiCrFe-3, electrodo 800, tungsteno TIG), alambre MIG/TIG, varillas, "
+        "discos abrasivos, caretas, guantes, gas. Si una línea es ambigua, igual ponela "
+        "en items con el texto que mejor leas + agregale ' [verificar]' al final del product.\n\n"
+        "━━━ FRACCIONES DE ELECTRODO (CRÍTICO) ━━━\n"
+        "En SUMIN las fracciones de electrodo son SIEMPRE una de este set cerrado:\n"
+        "  1/16, 5/64, 3/32, 1/8, 5/32, 3/16, 7/32, 1/4, 5/16, 3/8\n"
+        "En manuscrita la letra 'G' o el dígito '8' se confunden con la fracción '1/8'. "
+        "El '32' a veces se lee como '52' o '5z'. Si ves algo como '7/G', '8/G', '7/8', "
+        "'1/G' al lado de un electrodo, en el 95% de los casos es '1/8'. Si ves '5/52' o "
+        "'3/52' es probablemente '5/32' o '3/32'. NUNCA devuelvas una fracción que no "
+        "esté en el set cerrado de arriba — si dudás, elegí la más común (1/8 para "
+        "6011/7018/309-16, 3/32 para tungsteno) y agregá ' [verificar]' al final del product.\n\n"
         "Si quantity no se ve, usá 1. Si la unidad no se ve, dejala como cadena vacía."
     )
     try:
@@ -1462,6 +1471,42 @@ def _looks_like_mig_consumable(product_info: str) -> bool:
     return any(k in p for k in _MIG_CONSUMABLE_HINTS)
 
 
+# Hints en la respuesta del modelo de visión que indican electrodo de TUNGSTENO TIG.
+# Se vende por unidad. Cualquier color/dopaje cuenta:
+#   Torio 2% (rojo), Cerio 2% (gris), Lantano (azul, dorado), Puro (verde),
+#   Rare Metals (morado).
+_TUNGSTEN_HINTS = (
+    "tungsteno", "tungsten", "tig",
+    "torio", "cerio", "lantano", "rare metals", "puro verde",
+    "wt-20", "wc-20", "wl-15", "wl-20", "wp",  # designaciones AWS
+)
+
+# Hints que indican electrodo común de revestido (se vende por libra):
+# 6011, 6013, 7018, 7018-1, 7024, 309-16, 308-16, 316-16, 800/INCONEL, etc.
+_LB_ELECTRODE_HINTS = (
+    "electrodo 6011", "electrodo 6013", "electrodo 7018", "electrodo 7024",
+    "electrodo 309", "electrodo 308", "electrodo 316",
+    "e6011", "e6013", "e7018", "e7024", "e309", "e308", "e316",
+    "inconel", "nicrfe", "electrodo 800", "e800",
+    "electrodo revestido", "revestido", "stick electrode",
+)
+
+
+def _quantity_question_for_product(product_info: str) -> str:
+    """Decide whether to ask the customer for quantity in LBS or UND.
+
+    Tungsten TIG electrodes are sold by unit; common stick electrodes
+    (6011/7018/309-16/etc.) are sold by pound. Anything else defaults to UND.
+    """
+    p = (product_info or "").lower()
+    # Tungsten check is FIRST because tungsten lines may also contain "electrodo"
+    if any(k in p for k in _TUNGSTEN_HINTS):
+        return "¿Cuántas unidades necesita?"
+    if any(k in p for k in _LB_ELECTRODE_HINTS):
+        return "¿Cuántas libras necesita?"
+    return "¿Cuántas unidades necesita?"
+
+
 def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str, state: dict):
     log_action("VisionAgent", "processing_image", f"{from_name} sent image")
     image_bytes = wa_download_image(media_id)
@@ -1559,7 +1604,11 @@ def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str
             log_action("VisionAgent", "mig_handoff_forward_error", str(e)[:200])
         return
 
-    response = f"Identificamos el producto:\n\n{product_info}\n\n¿Cuántas unidades necesita?"
+    # Para electrodos comunes (6011/7018/309-16/etc.) preguntamos en LIBRAS — se venden
+    # por peso. Solo el electrodo de TUNGSTENO TIG se vende por unidad. El resto
+    # (caretas, discos, alambre, etc.) sigue en unidades como default.
+    qty_question = _quantity_question_for_product(product_info)
+    response = f"Identificamos el producto:\n\n{product_info}\n\n{qty_question}"
     wa_send(from_number, response)
 
 def payment_agent(from_number: str, from_name: str, media_id: str, image_bytes: bytes, state: dict):
