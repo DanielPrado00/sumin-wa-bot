@@ -2738,9 +2738,46 @@ def zoho_get_or_create_customer(name: str, phone: str) -> str | None:
     return None
 
 
+# ─── ZOHO PDF TEMPLATES ─────────────────────────────────────────────────────
+# Daniel maintains two estimate templates in Zoho Books. Most clients use the
+# default (COTI). A few specific clients ALWAYS need the PROFORMA template
+# (their AP / accounting requires that specific layout).
+ZOHO_TEMPLATE_DEFAULT  = "5751229000000198905"   # COTI
+ZOHO_TEMPLATE_PROFORMA = "5751229000010418240"   # PROFORMA
+
+# contact_ids that should always receive PROFORMA. Hardcoded — Daniel can
+# extend the set as more clients require this. (We could later move this to
+# a Zoho custom field on each contact, but for ~6 clients hardcoding is fine.)
+SPECIAL_TEMPLATE_BY_CONTACT: dict[str, str] = {
+    # Aceites y Derivados S.A. (ACEYDESA) — siempre PROFORMA
+    "5751229000000359737": ZOHO_TEMPLATE_PROFORMA,
+    # Standard Fruit de Honduras — las 5 sucursales registradas usan PROFORMA
+    "5751229000000533197": ZOHO_TEMPLATE_PROFORMA,  # LA C
+    "5751229000000385909": ZOHO_TEMPLATE_PROFORMA,  # LA CEIBA
+    "5751229000000533263": ZOHO_TEMPLATE_PROFORMA,  # PTO
+    "5751229000000385921": ZOHO_TEMPLATE_PROFORMA,  # PTO CASTILLA
+    "5751229000000385933": ZOHO_TEMPLATE_PROFORMA,  # PTO CORTES
+}
+
+
+def _template_id_for_customer(customer_id: str | None) -> str | None:
+    """Return template_id to use for this customer, or None to let Zoho pick
+    the org default. Override only when the contact_id is in the special list."""
+    if customer_id and customer_id in SPECIAL_TEMPLATE_BY_CONTACT:
+        return SPECIAL_TEMPLATE_BY_CONTACT[customer_id]
+    return ZOHO_TEMPLATE_DEFAULT
+
+
 def zoho_create_estimate(customer_name: str, customer_phone: str, line_items: list[dict]) -> dict | None:
     """Create a Zoho Books estimate. Requires customer_id, which we look up
-    (or create) via zoho_get_or_create_customer."""
+    (or create) via zoho_get_or_create_customer.
+
+    Selects PDF template based on customer: ACEYDESA + Standard Fruit (5
+    sucursales) → PROFORMA; everyone else → COTI default. If Zoho rejects the
+    template_id (returns 4xx), we retry once WITHOUT the template_id so the
+    quote still gets created with the org default — never block the sale on
+    a template config issue.
+    """
     token = get_zoho_access_token()
     if not token or not ZOHO_ORG_ID:
         return None
@@ -2753,12 +2790,15 @@ def zoho_create_estimate(customer_name: str, customer_phone: str, line_items: li
          "rate": li["rate"], "unit": li.get("unit", "")}
         for li in line_items
     ]
+    template_id = _template_id_for_customer(customer_id)
     payload = {
         "customer_id": customer_id,
         "line_items":  formatted,
         "notes":       f"Cotización vía WhatsApp — {customer_phone}",
         "terms":       "Precios incluyen ISV (15%). Válida por 15 días.",
     }
+    if template_id:
+        payload["template_id"] = template_id
     try:
         r = httpx.post(
             "https://www.zohoapis.com/books/v3/estimates",
@@ -2767,10 +2807,24 @@ def zoho_create_estimate(customer_name: str, customer_phone: str, line_items: li
             json=payload,
             timeout=15,
         )
+        # Retry without template_id if Zoho rejected it — protects against
+        # template-config issues (bad ID, deleted template) breaking the sale.
+        if r.status_code == 400 and template_id and "template" in r.text.lower():
+            log_action("ZohoAPI", "estimate_retry_no_template",
+                       f"status=400 — retrying without template_id={template_id}")
+            payload.pop("template_id", None)
+            r = httpx.post(
+                "https://www.zohoapis.com/books/v3/estimates",
+                params={"organization_id": ZOHO_ORG_ID},
+                headers={"Authorization": f"Zoho-oauthtoken {token}", "Content-Type": "application/json"},
+                json=payload,
+                timeout=15,
+            )
         if r.status_code in (200, 201):
             est = r.json().get("estimate", {})
+            tpl_label = "PROFORMA" if template_id == ZOHO_TEMPLATE_PROFORMA else ("COTI" if template_id else "default")
             log_action("ZohoAPI", "estimate_created",
-                       f"#{est.get('estimate_number')} for {customer_name} (cust_id={customer_id})")
+                       f"#{est.get('estimate_number')} for {customer_name} (cust_id={customer_id}) tpl={tpl_label}")
             return est
         log_action("ZohoAPI", "estimate_error", f"status={r.status_code} body={r.text[:300]}")
     except Exception as e:
