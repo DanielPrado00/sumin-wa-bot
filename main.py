@@ -1581,6 +1581,18 @@ def match_product_to_catalog(client_query: str, catalog: list,
                 f"NUNCA elijas un vidrio.\n"
                 f"  • Si la consulta dice 'careta' sin más detalle: es una "
                 f"careta para soldadura, NO un vidrio.\n"
+                f"BOQUILLAS VICTOR — DEFAULT POR USO:\n"
+                f"  Si la consulta es 'boquilla #N marca Victor' (con N entre 1 y 5) "
+                f"SIN especificar uso (sin 'para corte', 'para soldar', 'para MIG', "
+                f"'para plasma', 'TIG'), por defecto es BOQUILLA DE OXICORTE — "
+                f"línea 1-101- para acetileno. Es la más común en HN.\n"
+                f"  • 'boquilla para SOLDAR' → solo si el cliente lo dice EXPLÍCITAMENTE.\n"
+                f"  • 'boquilla para MIG'    → numeración por diámetro de alambre "
+                f"(0.030, 0.035, 0.045, 0.8mm, 0.9mm, 1.2mm). Si la consulta tiene "
+                f"esos diámetros, es MIG.\n"
+                f"  • 'boquilla para PLASMA' → traen número de parte alfanumérico "
+                f"(9-8215, 9-8210, etc.). Si la consulta tiene ese formato, es plasma.\n"
+                f"  • 'boquilla para TIG'    → cerámica gas lens / 53N87 / similar.\n"
                 f"Responde SOLO el SKU exacto del producto, sin explicaciones. "
                 f"Si no hay match claro, responde NINGUNO."}]
         ).content[0].text.strip()
@@ -2970,6 +2982,71 @@ _QUOTE_NONAME_WORDS = {
 }
 
 
+# v20: when the bot asks "¿A nombre de quién?" the user sometimes replies with
+# a CLARIFICATION about the products instead of a name — e.g. "son boquillas
+# de corte", "es para soldar", "1-101- de acetileno". Without this check we
+# silently accepted "son boquillas de corte" as the customer name and the
+# Zoho estimate ended up tagged with that string. Detect technical tokens so
+# we can route the message back through the item-resolution flow instead.
+_TECH_CLARIF_RE = re.compile(
+    r"\b("
+    r"boquilla|tip|punta|electrodo|alambre|disco|guante|careta|"
+    r"vidrio|regulador|man[oó]metro|antorcha|"
+    r"oxicorte|corte|soldar|soldadura|plasma|mig|tig|"
+    r"acetileno|arg[oó]n|propano|"
+    r"victor|harris|smith|cebora|hypertherm|panasonic|lincoln|"
+    r"6010|6011|6013|6018|7018|7024|3[01]\d|"
+    r"\d+/\d+|\d+\s*mm|\d+\s*lb|\d+\s*und|\d+-\d+-\d+"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Keywords that disambiguate boquilla type. Used to re-resolve ambiguous
+# boquilla items in the Zoho catalog when the customer clarifies after the
+# initial message.
+_BOQUILLA_TYPE_HINTS = {
+    "corte":     "para oxicorte",
+    "oxicorte":  "para oxicorte",
+    "1-101":     "para oxicorte 1-101",
+    "soldar":    "para soldar",
+    "soldadura": "para soldar",
+    "plasma":    "para plasma",
+    "mig":       "para mig",
+    "tig":       "para tig",
+    "gas":       "para gas",  # lowercase 'gas' alone — gpn / gas natural
+    "gpn":       "para gpn",
+}
+
+
+def _looks_like_product_clarification(text: str) -> bool:
+    """User probably gave a product clarification instead of a customer name.
+    Examples that return True:
+      "son boquillas de corte"       (boquilla, corte)
+      "es para soldar"               (soldar)
+      "1-101- de acetileno"          (1-101, acetileno)
+      "para oxicorte"                (oxicorte)
+      "victor original"              (victor)
+    Examples that return False:
+      "Aceites y Derivados"
+      "Azucarera del Norte"
+      "Constructora García S.A."
+    """
+    if not text:
+        return False
+    return bool(_TECH_CLARIF_RE.search(text))
+
+
+def _extract_clarification_hint(text: str) -> str:
+    """Pick the best Zoho-search suffix from a clarification message.
+    Returns "" if nothing useful is found."""
+    t = (text or "").lower()
+    # Order matters — more specific first ("1-101-" before "corte").
+    for kw, hint in _BOQUILLA_TYPE_HINTS.items():
+        if kw in t:
+            return hint
+    return ""
+
+
 def _parse_quote_name_response_open(text: str) -> str:
     """Parse customer's reply when we asked '¿A nombre de quién?' WITHOUT
     suggesting any name. Returns the resolved customer name.
@@ -3180,6 +3257,60 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                     "(Si prefiere, escriba 'sin nombre' y la hago a nombre de Consumidor Final)",
                 )
                 return
+
+        # v20: before treating the reply as a customer name, check whether it
+        # looks more like a product clarification (e.g. "son boquillas de corte"
+        # after we matched ambiguous "boquilla #N marca Victor"). If so, apply
+        # the hint to re-resolve any ambiguous items in Zoho instead of saving
+        # the message as the customer's name.
+        if _looks_like_product_clarification(text):
+            hint = _extract_clarification_hint(text)
+            log_action(
+                "QuoteAgent", "name_response_was_clarification",
+                f"text='{text[:80]}' hint='{hint}'",
+            )
+            re_resolved = 0
+            for li in pending["items"]:
+                cur_name = (li.get("name") or "").lower()
+                # We re-resolve ambiguous boquilla matches; safe to extend
+                # later to other ambiguous categories.
+                if "boquilla" in cur_name and hint:
+                    # Try to keep size markers like "#1" / "VICTOR" by re-using
+                    # the current Zoho name and appending the new hint.
+                    new_query = f"{li.get('name','')} {hint}".strip()
+                    matched = zoho_search_item_for_quote(
+                        new_query, requested_unit=li.get("unit") or "",
+                    )
+                    if matched and matched.get("item_id") and matched["item_id"] != li.get("item_id"):
+                        log_action(
+                            "QuoteAgent", "boquilla_re_resolved",
+                            f"'{li.get('name','')[:40]}' → '{matched.get('name','')[:40]}'",
+                        )
+                        li["item_id"] = matched["item_id"]
+                        li["name"]    = matched.get("name") or li["name"]
+                        li["rate"]    = matched.get("rate", li.get("rate"))
+                        li["unit"]    = matched.get("unit") or li.get("unit")
+                        re_resolved += 1
+            meta["pending_quote"] = pending
+            save_state(state)
+            if re_resolved:
+                summary_lines = "\n".join(
+                    f"  • {li.get('quantity',1):g} {li.get('unit','UND')} {li.get('name','')[:50]}"
+                    for li in pending["items"]
+                )
+                wa_send(
+                    from_number,
+                    f"👍 Anotado, aplico la aclaración. Items actualizados:\n{summary_lines}\n\n"
+                    "¿A nombre de quién o de qué empresa le genero la cotización? "
+                    "(Si prefiere, escriba 'sin nombre' y la hago a nombre de Consumidor Final)",
+                )
+            else:
+                wa_send(
+                    from_number,
+                    "👍 Anotado. Para esa cotización, ¿a nombre de quién o de qué empresa? "
+                    "(Si prefiere, escriba 'sin nombre' y la hago a nombre de Consumidor Final)",
+                )
+            return
 
         # Open name parsing — no "suggested" fallback.
         customer_name = _parse_quote_name_response_open(text)
