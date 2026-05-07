@@ -2277,38 +2277,137 @@ def zoho_search_item_for_quote(product_name: str,
     return None
 
 
+_LEGAL_FORM_TOKENS = {
+    "sa", "s.a.", "s.a", "cv", "c.v.", "c.v", "srl", "s.r.l.", "s.r.l",
+    "ltda", "ltd", "inc", "co", "sas", "spa",
+}
+_STOP_TOKENS = {
+    "de", "del", "la", "el", "los", "las", "y", "e", "por", "con", "para",
+    "the", "of", "and",
+}
+_NORMALIZE_RE = re.compile(r"[^\w\s]+", re.UNICODE)
+
+
+def _normalize_for_match(s: str) -> str:
+    """Normalize a name for token-based comparison."""
+    s = (s or "").lower()
+    s = _NORMALIZE_RE.sub(" ", s)
+    return " ".join(s.split())
+
+
+def _significant_tokens(s: str) -> set[str]:
+    """Tokens we use to compare names: lowercase, no punct, drop legal forms
+    and Spanish stop-words. 'AZUCARERA DEL NORTE' → {'azucarera', 'norte'}."""
+    norm = _normalize_for_match(s)
+    return {
+        t for t in norm.split()
+        if len(t) >= 2 and t not in _LEGAL_FORM_TOKENS and t not in _STOP_TOKENS
+    }
+
+
+def _match_score(query_tokens: set[str], candidate: str) -> float:
+    """Score a candidate name 0.0–1.0 by significant-token overlap."""
+    if not query_tokens:
+        return 0.0
+    cand_tokens = _significant_tokens(candidate)
+    if not cand_tokens:
+        return 0.0
+    overlap = query_tokens & cand_tokens
+    if not overlap:
+        return 0.0
+    # Score: fraction of query tokens that appear in candidate
+    return len(overlap) / len(query_tokens)
+
+
 def zoho_get_or_create_customer(name: str, phone: str) -> str | None:
     """Return contact_id for the given customer name.
-    1) Search existing contacts by name (case-insensitive contains).
-    2) If none found, create a new contact with San Pedro Sula as billing city.
-    Returns None if Zoho is unreachable or both attempts fail."""
+
+    Matching strategy (in order):
+      1) Exact case-insensitive match on contact_name.
+      2) Fuzzy match: rank candidates by significant-token overlap against the
+         input name. Stop-words ("de", "la", "y") and legal forms ("S.A.",
+         "C.V.", "SRL") are stripped before comparison. Pick the best match if
+         score ≥ 0.6 AND it's the unique top candidate.
+      3) Otherwise create a new contact.
+
+    The previous version used `contact_name_contains` (which doesn't always
+    work in Zoho's API) and fell back to creating duplicates whenever the
+    user's reply was a slightly different spelling of an existing customer
+    (e.g. "Enercom" vs "ENERCOM S.A.").
+    """
     token = get_zoho_access_token()
     if not token or not ZOHO_ORG_ID:
         return None
     clean_name = (name or "").strip()
     if not clean_name:
         return None
-    # 1) Search existing
+    query_tokens = _significant_tokens(clean_name)
+    # If the name reduced to no significant tokens (e.g. only legal forms),
+    # fall back to a less-stripped token set so search isn't empty.
+    if not query_tokens:
+        query_tokens = set(_normalize_for_match(clean_name).split())
+
+    # 1) Search using `search_text` (more reliable than `contact_name_contains`).
+    # Use the FIRST significant token as the primary search anchor; we'll rank
+    # candidates ourselves below.
+    primary_token = sorted(query_tokens, key=len, reverse=True)[0] if query_tokens else clean_name
     try:
         r = httpx.get(
             "https://www.zohoapis.com/books/v3/contacts",
-            params={"organization_id": ZOHO_ORG_ID, "contact_name_contains": clean_name},
+            params={
+                "organization_id": ZOHO_ORG_ID,
+                "search_text": primary_token,
+                "per_page": 50,
+            },
             headers={"Authorization": f"Zoho-oauthtoken {token}"},
             timeout=10,
         )
-        contacts = r.json().get("contacts", [])
-        # Prefer exact (case-insensitive) match
+        contacts = r.json().get("contacts", []) if r.status_code == 200 else []
+
+        # 1a) Exact case-insensitive match on contact_name
+        clean_lower = clean_name.lower()
         for c in contacts:
-            if c.get("contact_name", "").strip().lower() == clean_name.lower():
+            if c.get("contact_name", "").strip().lower() == clean_lower:
                 cid = c.get("contact_id")
                 log_action("ZohoAPI", "customer_match_exact", f"{clean_name} → {cid}")
                 return cid
-        # Otherwise take first result
-        if contacts:
-            cid = contacts[0].get("contact_id")
-            log_action("ZohoAPI", "customer_match_partial",
-                       f"{clean_name} → {contacts[0].get('contact_name')} ({cid})")
-            return cid
+
+        # 1b) Fuzzy ranked match on significant tokens
+        scored = []
+        for c in contacts:
+            cname = c.get("contact_name", "")
+            if not cname:
+                continue
+            score = _match_score(query_tokens, cname)
+            if score > 0:
+                scored.append((score, cname, c.get("contact_id")))
+        scored.sort(reverse=True)
+
+        if scored:
+            top_score, top_name, top_cid = scored[0]
+            # Require min score 0.6 (i.e. ≥60% of query tokens are in candidate).
+            # AND a clear gap from the runner-up — even for "perfect" 1.0
+            # matches, if there's a tie ("Azucarera" → AZUCARERA CHOLUTECA AND
+            # AZUCARERA DEL NORTE both score 1.0), we should NOT auto-pick.
+            second_score = scored[1][0] if len(scored) > 1 else 0.0
+            gap = top_score - second_score
+            confident = top_score >= 0.6 and gap >= 0.2
+            # Tighter rule for very-high scores: still require gap ≥ 0.1
+            if top_score >= 0.9 and gap >= 0.1:
+                confident = True
+            if confident:
+                log_action(
+                    "ZohoAPI", "customer_match_fuzzy",
+                    f"'{clean_name}' → '{top_name}' (score={top_score:.2f}, runner_up={second_score:.2f})",
+                )
+                return top_cid
+            else:
+                log_action(
+                    "ZohoAPI", "customer_match_ambiguous",
+                    f"'{clean_name}': top='{top_name}' ({top_score:.2f}) vs runner_up ({second_score:.2f}) — creating new",
+                )
+        else:
+            log_action("ZohoAPI", "customer_no_search_results", f"'{clean_name}' (token={primary_token})")
     except Exception as e:
         log_action("ZohoAPI", "customer_search_error", str(e))
     # 2) Create new
@@ -2490,37 +2589,94 @@ def _parse_quote_name_response_open(text: str) -> str:
     """Parse customer's reply when we asked '¿A nombre de quién?' WITHOUT
     suggesting any name. Returns the resolved customer name.
 
-    - Empty / generic affirm ("sí", "ok") → Consumidor Final
-    - "sin nombre" / "consumidor" / similar → Consumidor Final
-    - Otherwise: clean up the response and use it as the name (max 80 chars)
+    Robust to filler / connector phrases:
+      - "sin nombre" / "consumidor" / similar → Consumidor Final
+      - "Azucarera del Norte"                 → Azucarera del Norte
+      - "es me la genera a nombre de Azucarera del Norte" → Azucarera del Norte
+      - "para Enercom porfa"                  → Enercom
+      - "hazla a nombre de Constructora García S.A." → Constructora García S.A.
+
+    Strategy: fast paths for trivial cases (empty / "sí" / "sin nombre"), then
+    take the literal if it looks like a clean name, otherwise fall back to a
+    Haiku LLM extraction.
     """
     t = (text or "").strip().rstrip(".!?¡¿")
     if not t:
         return "Consumidor Final"
     t_low = t.lower()
 
+    # Fast path 1: explicit "yes" / generic affirm → no name given
     if t_low in _QUOTE_AFFIRM_WORDS or t_low in {"yes", "ok", "okay", "claro", "dale"}:
-        # The user said "yes" but we never offered a specific name. Default safe.
         return "Consumidor Final"
 
-    if t_low in _QUOTE_NONAME_WORDS or t_low.startswith("consumidor") or t_low.startswith("sin "):
-        return "Consumidor Final"
-
-    # Strip common prefixes
-    for prefix in (
-        "a nombre de ", "a nombre del ", "para la empresa ", "para ",
-        "facturar a ", "facturar para ", "a la empresa ",
-        "cotizar a ", "cotizar para ", "es para ", "es de ",
+    # Fast path 2: explicit "sin nombre" / "consumidor"
+    if (
+        t_low in _QUOTE_NONAME_WORDS
+        or t_low.startswith("consumidor")
+        or t_low.startswith("sin nombre")
+        or t_low == "sin"
+        or t_low == "ninguno"
     ):
-        if t_low.startswith(prefix):
-            t = t[len(prefix):].strip()
-            break
-
-    # Clean up + trim
-    t = t.strip(" \"\\\'.,;:")
-    if not t:
         return "Consumidor Final"
-    return t[:80]
+
+    # Fast path 3: clean short reply (≤6 tokens, no filler verbs) → take as-is
+    tokens = t.split()
+    has_filler = any(
+        w in t_low for w in (
+            "genera", "genere", "factur", "hago", "haga", "haz", "hace",
+            "ponela", "ponele", "ponga", "se hace", "es para",
+            "me la", "esta cot", "esa cot", "la cot",
+        )
+    )
+    if len(tokens) <= 6 and not has_filler:
+        # Strip trivial prefixes
+        for prefix in (
+            "a nombre de ", "a nombre del ", "para la empresa ", "para ",
+            "facturar a ", "facturar para ", "a la empresa ",
+            "cotizar a ", "cotizar para ", "es para ", "es de ",
+        ):
+            if t_low.startswith(prefix):
+                t = t[len(prefix):].strip()
+                break
+        cleaned = t.strip(" \"\\\'.,;:")
+        if cleaned:
+            return cleaned[:80]
+
+    # Slow path: Haiku LLM extraction for natural-language replies.
+    try:
+        msg = claude.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=80,
+            system=(
+                "Extraés el nombre del cliente o empresa de la respuesta del usuario "
+                "a la pregunta '¿A nombre de quién genero la cotización?'. Devolvés "
+                "EXCLUSIVAMENTE el nombre, sin frases, sin prefijos, sin signos de "
+                "puntuación al final. Si el usuario dice variantes de 'sin nombre' / "
+                "'consumidor final' / 'no importa', devolvés literalmente: Consumidor Final"
+            ),
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": (
+                    "Respuesta del usuario: \"" + text + "\"\n\n"
+                    "Ejemplos:\n"
+                    "  \"Azucarera del Norte\" → Azucarera del Norte\n"
+                    "  \"es me la genera a nombre de Azucarera del Norte\" → Azucarera del Norte\n"
+                    "  \"para Enercom porfa\" → Enercom\n"
+                    "  \"hazla a nombre de Constructora García S.A.\" → Constructora García S.A.\n"
+                    "  \"esta la genera a nombre de aceites y derivados\" → Aceites y Derivados\n"
+                    "  \"sin nombre\" → Consumidor Final\n\n"
+                    "Devolvé SOLO el nombre extraído (sin comillas, sin prefijos):"
+                )}
+            ]}],
+        )
+        extracted = msg.content[0].text.strip().strip("\"'.,;:")
+        if not extracted:
+            return "Consumidor Final"
+        log_action("QuoteAgent", "name_extracted_via_llm", f"'{text[:60]}' → '{extracted[:60]}'")
+        return extracted[:80]
+    except Exception as e:
+        log_action("QuoteAgent", "name_extract_error", str(e)[:200])
+        # Fallback: last-resort literal cleanup
+        return t.strip(" \"\\\'.,;:")[:80] or "Consumidor Final"
 
 
 def _parse_quote_name_response(text: str, suggested: str) -> str:
