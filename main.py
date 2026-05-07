@@ -817,6 +817,14 @@ def save_state(state):
         json.dump(state, f, indent=2, ensure_ascii=False)
 
 def log_action(agent: str, action: str, detail: str):
+    # Print to stdout so Render dashboard live-tail surfaces application events
+    # (uvicorn captures stdout). Without this, only HTTP request lines appear
+    # and we can't diagnose flow issues like "did normalize_query run?".
+    try:
+        print(f"[{agent}] {action}: {detail[:200]}", flush=True)
+    except Exception:
+        pass
+    # Also persist to JSON file (legacy; survives restarts within same disk).
     try:
         logs = []
         try:
