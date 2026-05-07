@@ -1292,6 +1292,13 @@ _PRODUCT_SYNONYMS: dict[str, list[str]] = {
     # "Reg." abreviado en Zoho — si cliente dice "regulador" buscar también "reg"
     "regulador": ["reg"],
     "reguladores": ["reg"],
+    # Vidrio (#N) → vidrio para careta de soldar. SIN sinónimo "boquilla" — los
+    # vidrios y las boquillas TIG comparten numeración (#10, #12), pero son
+    # productos completamente distintos. Daniel reportó esto v19→v20:
+    # "vidrio #12" se confundió con "BOQUILLA DE CERAMICA GAS LENS PARA TIG #12".
+    # Forzamos "vidrio" → texto que prioriza el match de careta.
+    "vidrio":   ["careta", "claro", "oscuro"],
+    "vidrios":  ["careta", "claros", "oscuros"],
 }
 
 
@@ -1565,6 +1572,15 @@ def match_product_to_catalog(client_query: str, catalog: list,
                 f"y otros con \"W.A.\" (Welding America) que coinciden por igual, "
                 f"SIEMPRE elegí el A.A. — es la línea preferida de SUMIN. "
                 f"Solo elegí W.A. si A.A. no existe para ese producto.\n"
+                f"DISAMBIGUACIÓN POR CATEGORÍA (no confundas categorías aunque "
+                f"compartan número):\n"
+                f"  • Si la consulta dice 'vidrio' o 'vidrios' (con o sin #N): "
+                f"es un VIDRIO PARA CARETA de soldar — NUNCA elijas una boquilla, "
+                f"copa, regulador o difusor, aunque tengan el mismo #.\n"
+                f"  • Si la consulta dice 'boquilla' o 'tip': es una boquilla; "
+                f"NUNCA elijas un vidrio.\n"
+                f"  • Si la consulta dice 'careta' sin más detalle: es una "
+                f"careta para soldadura, NO un vidrio.\n"
                 f"Responde SOLO el SKU exacto del producto, sin explicaciones. "
                 f"Si no hay match claro, responde NINGUNO."}]
         ).content[0].text.strip()
@@ -2044,14 +2060,26 @@ def _apply_one_correction(pc: dict, correction: dict) -> tuple[bool, str]:
             return False, f"cantidad inválida para item {idx}: {new_value!r}"
         li["quantity"] = qty
     else:
-        new_items, _ = extract_items_for_quote(f"cotice 1 de {new_value}", [])
-        if not new_items:
-            return False, f"no encontré '{new_value}' en el catálogo"
-        ni = new_items[0]
-        li["item_id"] = ni.get("item_id", li.get("item_id"))
-        li["name"]    = ni.get("name", li.get("name"))
-        li["rate"]    = ni.get("rate", li.get("rate"))
-        li["unit"]    = ni.get("unit", li.get("unit"))
+        # v20 fix: extract_items_for_quote only returns intent ({product, quantity,
+        # unit}) — it does NOT search Zoho. Previously we copied ni["item_id"]/
+        # ["name"]/["rate"], which were always missing → li kept the old values
+        # and the "correction" was a silent no-op (Daniel reported this with
+        # "vidrio #12 200 unidades" — bot said "Aplicando corrección" but the
+        # PDF still had the old BOQUILLA TIG line).
+        # Now go straight to the catalog matcher.
+        new_value_str = str(new_value).strip()
+        # Use the existing unit if available — keeps the LB/UND/KG narrowing
+        # consistent with what the customer originally asked for that line.
+        prev_unit = li.get("unit") or ""
+        matched = zoho_search_item_for_quote(new_value_str, requested_unit=prev_unit)
+        if not matched:
+            return False, f"no encontré '{new_value_str}' en el catálogo"
+        li["item_id"] = matched.get("item_id") or li.get("item_id")
+        li["name"]    = matched.get("name") or li.get("name")
+        li["rate"]    = matched.get("rate") if matched.get("rate") is not None else li.get("rate")
+        li["unit"]    = matched.get("unit") or li.get("unit")
+        log_action("ConfirmAgent", "product_swap",
+                   f"item={idx} '{new_value_str}' → {li['name']} (id={li['item_id']})")
     return True, ""
 
 
@@ -2472,6 +2500,12 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
         "2. Las CANTIDADES de cada producto\n"
         "3. La UNIDAD DE MEDIDA que pide el cliente para cada producto\n"
         "4. El NOMBRE o EMPRESA para la cotización (si el cliente dijo 'a nombre de X' o 'para la empresa X')\n\n"
+        "⚠️ EXHAUSTIVIDAD CRÍTICA — MUY IMPORTANTE:\n"
+        "Si el cliente pide 4 productos diferentes, devolvé los 4. Si pide 7, devolvé los 7.\n"
+        "NO omitas el último item por brevedad. NO resumas. NO agrupes.\n"
+        "Recorrá el mensaje del PRINCIPIO al FINAL — especialmente notas de voz, donde el último\n"
+        "item suele estar al final del audio y el modelo tiende a olvidarlo. Cuenta los productos\n"
+        "antes de cerrar el JSON: si el cliente listó '1) ... 2) ... 3) ... 4) ...', devolvé 4 entries.\n\n"
         "REGLAS PARA LA UNIDAD (campo `unit`):\n"
         "- 'libra', 'libras', 'lb', 'lbs', 'pound' → \"LB\"\n"
         "- 'unidad', 'unidades', 'und', 'suelto', 'por electrodo', 'pieza', 'pza' → \"UND\"\n"
@@ -2494,7 +2528,8 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
     try:
         resp = claude.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=500,
+            max_tokens=2000,  # v20: was 500 — long audios with 4-7 items were
+            # truncating the JSON mid-array, dropping the final item silently.
             messages=[{"role": "user", "content": prompt}],
         )
         content = resp.content[0].text.strip()
@@ -2502,6 +2537,8 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
         if match:
             parsed = json.loads(match.group())
             items = parsed.get("items", [])
+            log_action("QuoteAgent", "extract_items_count",
+                       f"items={len(items)} text_len={len(text)}")
             # Backfill: if Haiku forgot the unit but the product looks like an
             # electrode, default to LB (welding electrodes are always LB unless
             # tungsten). Tungsten → UND.
