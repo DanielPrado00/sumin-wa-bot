@@ -527,6 +527,13 @@ Si el cliente dice solo "boquilla" o "boquilla de corte" sin detalle:
 4. Si plasma → preguntar modelo de máquina (Hypertherm, Lincoln, Hugong, Texas, Miller) o pedir foto
 5. Si tiene número (#1, #3, etc.) ya sabés el size — confirmá tipo igual.
 
+REGLA DE DEFAULT — cuando el cliente pide "boquillas de corte" en una LISTA larga
+de productos sin especificar gas: asumir DEFAULT 1-101 ACETILENO. La mayoría de
+clientes en HN usa acetileno. Cotizar con 1-101 acetileno y mencionarle al final:
+"⚠️ Asumimos boquillas 1-101 para acetileno. Si usa GPN/propano avísenos para
+ajustar a la línea GPN." NO pierdas la venta preguntando 5 cosas en una lista
+de 12 ítems — preferí asumir y dejar la puerta abierta a corregir.
+
 NUNCA cotices boquilla GPN-1 / 1-101-3 / etc. sin pasar por este flujo, aunque [INVENTARIO ZOHO]
 sugiera un match. El SKU exacto depende del tipo confirmado por el cliente.
 
@@ -1225,10 +1232,122 @@ _QUERY_STOPWORDS = {
 }
 
 
+# ─── HONDURAS-SPECIFIC PRODUCT SYNONYMS ────────────────────────────────────
+# Customers in Honduras call certain products by "wrong" technical names.
+# We map them to whatever Zoho actually catalogs them as. Bot must NEVER
+# explain the difference to the customer (per Daniel's rule) — just resolve.
+_PRODUCT_SYNONYMS: dict[str, list[str]] = {
+    # Manómetro = lo que clientes dicen para REGULADOR (técnicamente un
+    # manómetro es solo el reloj indicador, pero en HN "manómetro" → regulador).
+    "manometro": ["regulador", "reg"],
+    "manómetro": ["regulador", "reg"],
+    "manometros": ["regulador", "reg"],
+    "manómetros": ["regulador", "reg"],
+    # Varilla de carbon → arcair (electrodo de carbón para gouging)
+    "carbon": ["arcair"],
+    "carbón": ["arcair"],
+    # "Reg." abreviado en Zoho — si cliente dice "regulador" buscar también "reg"
+    "regulador": ["reg"],
+    "reguladores": ["reg"],
+}
+
+
+# ─── DIMENSION NORMALIZATION ───────────────────────────────────────────────
+# Customers say "2.4 mm" but Zoho indexes as "3/32"". We translate before
+# searching. Common SUMIN electrode/welding-wire fractions only.
+_MM_TO_FRACTION: dict[str, str] = {
+    "1.6": "1/16",
+    "2.0": "5/64",
+    "2.4": "3/32",
+    "2.5": "3/32",   # close enough
+    "3.0": "1/8",    # close enough
+    "3.2": "1/8",
+    "3.25": "1/8",
+    "4.0": "5/32",
+    "4.8": "3/16",
+    "5.0": "3/16",   # close enough
+    "5.6": "7/32",
+    "6.0": "1/4",    # close enough
+    "6.4": "1/4",
+    "8.0": "5/16",
+    "10.0": "3/8",
+}
+
+# Common typos: "1.8" usually means "1/8" on phone keyboards (people miss the "/").
+# Map ambiguous "X.Y" → "X/Y" only for valid SUMIN fractions to avoid corrupting
+# real decimal numbers like "2.4 mm".
+_DOT_FRAC_NORMALIZE: dict[str, str] = {
+    "1.8": "1/8",
+    "1.16": "1/16",
+    "3.32": "3/32",
+    "3.16": "3/16",
+    "5.32": "5/32",
+    "5.64": "5/64",
+    "5.16": "5/16",
+    "7.32": "7/32",
+    "1.4": "1/4",
+    "3.8": "3/8",
+}
+
+
+def _normalize_query_for_search(text: str) -> str:
+    """Apply synonym expansion + mm→fraction + typo fixes before catalog search.
+
+    Examples:
+      'electrodo 7018 2.4 mm'      → 'electrodo 7018 3/32 (2.4 mm)'
+      'me genera 50 lbs de 7018 1.8' → 'me genera 50 lbs de 7018 1/8 (1.8)'
+      'manometro para acetileno'   → 'manometro regulador reg para acetileno'
+      'varilla de carbon de 8 mm'  → 'varilla de carbon arcair de 5/16 (8 mm)'
+    The original tokens stay (so exact matches still work) — we just *append*
+    expansions in parentheses. Idempotent.
+    """
+    if not text:
+        return text
+    out = text
+
+    # 1) "X.Y mm" → "X/Y" (mm to fraction)
+    def _mm_repl(m):
+        mm = m.group(1)
+        frac = _MM_TO_FRACTION.get(mm) or _MM_TO_FRACTION.get(mm + ".0")
+        if frac:
+            return f"{frac} ({mm} mm)"
+        return m.group(0)
+    out = re.sub(r"\b(\d+(?:\.\d+)?)\s*mm\b", _mm_repl, out, flags=re.IGNORECASE)
+
+    # 2) "X.Y" without "mm" but in SUMIN fraction set → "X/Y"
+    # Only apply if exactly matches our typo dict (to not corrupt "2.4" without "mm").
+    def _dot_repl(m):
+        candidate = m.group(0)
+        return _DOT_FRAC_NORMALIZE.get(candidate, candidate)
+    # Use word-boundary so we don't touch numbers inside SKUs.
+    out = re.sub(r"\b\d+\.\d+\b", _dot_repl, out)
+
+    # 3) Synonym expansion (append, don't replace).
+    # Use word-boundary check so "reg" gets added even when "regulador" is in
+    # the text — Zoho indexes some items as abbreviated "REG. VICTOR..." and we
+    # need the token "reg" available for prefilter scoring.
+    out_lower = out.lower()
+    additions = []
+    for word, synonyms in _PRODUCT_SYNONYMS.items():
+        if word in out_lower:
+            for syn in synonyms:
+                if not re.search(rf"\b{re.escape(syn)}\b", out_lower) and syn not in additions:
+                    additions.append(syn)
+    if additions:
+        out = out + " " + " ".join(additions)
+
+    return out
+
+
 def _query_tokens(text: str) -> list[str]:
-    """Extract significant tokens for catalog pre-filtering."""
+    """Extract significant tokens for catalog pre-filtering.
+
+    Applies synonym expansion + dimension normalization first so customer
+    queries like "manómetro 2.4 mm" get tokens that match Zoho's "regulador 3/32".
+    """
     if not text:
         return []
+    text = _normalize_query_for_search(text)
     s = re.sub(r"[¿?¡!.,;:()\"]", " ", text.lower())
     raw = s.split()
     out: list[str] = []
@@ -1244,12 +1363,39 @@ def _query_tokens(text: str) -> list[str]:
     return out
 
 
+def _is_aa_brand(item: dict) -> bool:
+    """True if a Zoho item is the SUMIN-preferred American Alloy variant.
+    AA gets preference when there's a tie with W.A. (Welding America)."""
+    name = (item.get("item_name") or "").upper()
+    desc = (item.get("description") or "").upper()
+    mfr  = (item.get("manufacturer") or "").upper()
+    brand = (item.get("brand") or "").upper()
+    if mfr == "AA" or "AMERICAN ALLOY" in brand or "AMERICAN ALLOY" in name:
+        return True
+    if " A.A." in name or name.endswith(" A.A.") or " AA " in f" {name} ":
+        return True
+    return False
+
+
+def _is_wa_brand(item: dict) -> bool:
+    """True if item is W.A. (Welding America) — deprioritized vs A.A."""
+    name = (item.get("item_name") or "").upper()
+    if " W.A." in name or name.endswith(" W.A.") or " WA " in f" {name} ":
+        return True
+    return False
+
+
 def _prefilter_catalog(query: str, catalog: list, top_n: int = 200) -> list:
-    """Score each item by query-token overlap. Falls back to first `top_n` if no matches."""
+    """Score each item by query-token overlap. Falls back to first `top_n` if no matches.
+
+    Brand bias: items with A.A. (American Alloy) get +1 point on ties — this
+    is SUMIN's preferred line. W.A. gets the same score as base. So when both
+    "ELECTRODO 7018 A.A." and "ELECTRODO 7018 W.A." match equally, A.A. wins.
+    """
     tokens = _query_tokens(query)
     if not tokens or not catalog:
         return catalog[:top_n]
-    scored: list[tuple[int, float, dict]] = []
+    scored: list[tuple[int, int, float, dict]] = []
     for item in catalog:
         name = (item.get("item_name") or "").lower()
         sku  = (item.get("sku") or "").lower()
@@ -1260,12 +1406,15 @@ def _prefilter_catalog(query: str, catalog: list, top_n: int = 200) -> list:
             if t in sku:
                 score += 1
         if score > 0:
+            # Brand boost — sorts first by token-score, then by AA-preference,
+            # then by stock. AA gets boost=1, W.A. gets 0, others 0.
+            brand_boost = 1 if _is_aa_brand(item) else 0
             stock = float(item.get("stock_on_hand") or 0)
-            scored.append((score, stock, item))
+            scored.append((score, brand_boost, stock, item))
     if not scored:
         return catalog[:top_n]
-    scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
-    return [it for _, _, it in scored[:top_n]]
+    scored.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
+    return [it for _, _, _, it in scored[:top_n]]
 
 
 def match_product_to_catalog(client_query: str, catalog: list,
@@ -1326,6 +1475,10 @@ def match_product_to_catalog(client_query: str, catalog: list,
                 f"Catálogo de productos disponibles (una línea por SKU):\n{catalog_text}"
                 f"{unit_hint}\n\n"
                 f"¿Cuál es el SKU del producto que mejor coincide con lo que pide el cliente?\n"
+                f"PREFERENCIA DE MARCA: si hay items con \"A.A.\" (American Alloy) "
+                f"y otros con \"W.A.\" (Welding America) que coinciden por igual, "
+                f"SIEMPRE elegí el A.A. — es la línea preferida de SUMIN. "
+                f"Solo elegí W.A. si A.A. no existe para ese producto.\n"
                 f"Responde SOLO el SKU exacto del producto, sin explicaciones. "
                 f"Si no hay match claro, responde NINGUNO."}]
         ).content[0].text.strip()
@@ -2195,15 +2348,41 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
 
     Each item returned has shape: {"product": str, "quantity": float, "unit": str}
     where unit ∈ {"LB","UND","CAJA","ROLLO","KG",""} ("" = cliente no lo especificó).
+
+    History context: ONLY last 3 messages. Anything older risks "history
+    poisoning" — the LLM picking up products from a previous (already closed)
+    cotización and mixing them into the current one. Daniel reported this:
+    EST-004819 for "aceites y derivados" was tagged with `not_found = electrodo
+    7018 2.4 mm` from a previous unrelated quote attempt.
+
+    Truncate history at any closing message — if a recent assistant message
+    contains "cotización confirmada" / "cotización dejada en pendiente" /
+    "no pude ubicar", we stop walking back further: those mark a clean break
+    from a previous quote.
     """
     recent_ctx = ""
-    for m in history[-8:]:
+    closing_markers = (
+        "cotización confirmada", "cotización dejada en pendiente",
+        "perfecto, cotización", "cotización rechazada", "cotización cancelada",
+    )
+    # Walk back at most 3 messages from the end, stopping early on a closing marker.
+    truncated: list = []
+    for m in reversed(history[-6:]):
+        content = m.get("content", "") or ""
+        if m.get("role") == "assistant" and any(mk in content.lower() for mk in closing_markers):
+            # Anything BEFORE this message is from an old quote — drop it.
+            break
+        truncated.append(m)
+        if len(truncated) >= 3:
+            break
+    truncated.reverse()
+    for m in truncated:
         role = "Cliente" if m["role"] == "user" else "Bot"
         recent_ctx += f"{role}: {m['content'][:300]}\n"
 
     prompt = (
         "Analiza la conversación y extrae:\n"
-        "1. Los PRODUCTOS que el cliente quiere cotizar (busca en TODO el historial, no solo el último mensaje)\n"
+        "1. Los PRODUCTOS que el cliente quiere cotizar EN ESTE MENSAJE (no traigas productos de cotizaciones anteriores ya cerradas — solo lo que el cliente pide AHORA o aclara del mensaje inmediatamente anterior)\n"
         "2. Las CANTIDADES de cada producto\n"
         "3. La UNIDAD DE MEDIDA que pide el cliente para cada producto\n"
         "4. El NOMBRE o EMPRESA para la cotización (si el cliente dijo 'a nombre de X' o 'para la empresa X')\n\n"
@@ -2218,8 +2397,8 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
         "- Los ELECTRODOS de soldadura (6010, 6011, 6013, 7018, 7024, E308, E309, E316, Everwear, NI-55, NI-99, etc.) se venden por LIBRA por defecto. Solo los electrodos de TUNGSTENO (TIG) se venden por UND.\n\n"
         "OTRAS REGLAS:\n"
         "- Un nombre de empresa (como 'Proenco', 'ACSA', etc.) NO es un producto — es el destinatario.\n"
-        "- Si el cliente dijo 'de 10' o 'quiero 10', es la cantidad del producto mencionado antes.\n"
-        "- Busca productos en TODO el historial, no solo en el último mensaje.\n\n"
+        "- Si el cliente dijo 'de 10' o 'quiero 10', es la cantidad del producto mencionado en el MISMO o el ANTERIOR mensaje. NO arrastres productos de hace varias cotizaciones.\n"
+        "- IGNORA productos que aparecen sólo en el contexto si fueron parte de una cotización anterior ya cerrada (no se confunden con la actual). El historial te sirve para entender el FLUJO, no para acumular productos.\n\n"
         f"Conversación reciente:\n{recent_ctx}\n"
         f"Mensaje actual: {text}\n\n"
         "Responde SOLO con JSON válido en este formato:\n"
