@@ -2789,7 +2789,20 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
             )
             return
 
-        if company_name_override and len(company_name_override) > 1:
+        # Trusted users (vendedores SUMIN reenviando solicitudes de clientes
+        # finales) cotizan para clientes distintos en cada conversación. NO
+        # podemos asumir el nombre del quote anterior — el LLM extractor a veces
+        # lee el history y devuelve "enercom" para el siguiente quote, aunque sea
+        # para otra empresa. Para trusted: SIEMPRE preguntar nombre, ignorar el
+        # override automático.
+        if is_trusted_number(from_number):
+            override_active = False
+            log_action("QuoteAgent", "trusted_skip_override",
+                       f"trusted user — asking for name regardless of override='{company_name_override}'")
+        else:
+            override_active = bool(company_name_override and len(company_name_override) > 1)
+
+        if override_active:
             customer_name = company_name_override
         else:
             # IMPORTANT: do NOT suggest the WhatsApp profile name. Many customers
