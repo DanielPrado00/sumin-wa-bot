@@ -1594,11 +1594,40 @@ def _quantity_question_for_product(product_info: str) -> str:
 # el bot actualiza el estimate en Zoho y manda PDF nuevo.
 
 CONFIRMATION_TTL_MIN = 30   # minutos vigentes después de mandar PDF
-CONFIRM_KEYWORDS = (
-    "✅", "ok", "okay", "todo bien", "todo correcto", "correcto",
+# Confirm keywords are split by length: short ones need WORD BOUNDARIES (otherwise
+# words like "tenSIle" or "tenemoS Ipads" trigger the "si" fast-path and the bot
+# wrongly confirms a pending quote when the user is actually starting a new one).
+_CONFIRM_KEYWORDS_LONG = (
+    "todo bien", "todo correcto", "correcto",
     "confirmo", "confirmado", "está bien", "esta bien", "perfecto",
-    "sí", "si", "yes", "👍",
 )
+_CONFIRM_KEYWORDS_SHORT = ("ok", "okay", "sí", "si", "yes")  # require \b...\b
+_CONFIRM_KEYWORDS_EMOJI = ("✅", "👍")
+_CONFIRM_SHORT_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(k) for k in _CONFIRM_KEYWORDS_SHORT) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_confirm_message(text: str) -> bool:
+    """True if `text` is a confirmation reply (✅ / ok / sí / "todo bien" / etc.).
+    Uses word boundaries for short keywords to avoid false positives on words
+    that contain "si" or "ok" as substring (tenSIle, marOK, etc.)."""
+    if not text:
+        return False
+    t = text.lower()
+    if any(e in t for e in _CONFIRM_KEYWORDS_EMOJI):
+        return True
+    if any(k in t for k in _CONFIRM_KEYWORDS_LONG):
+        return True
+    if _CONFIRM_SHORT_RE.search(t):
+        return True
+    return False
+
+
+# Backward-compat alias (used by parser fast-path; preserved so other code
+# referring to CONFIRM_KEYWORDS as a flat tuple still works).
+CONFIRM_KEYWORDS = _CONFIRM_KEYWORDS_LONG + _CONFIRM_KEYWORDS_SHORT + _CONFIRM_KEYWORDS_EMOJI
 
 
 def _build_confirmation_message(line_items: list[dict], total: float, est_number: str) -> str:
@@ -1693,8 +1722,8 @@ def _parse_confirmation_response(text: str, items: list[dict]) -> dict:
     """
     t = (text or "").strip().lower()
     items_count = len(items)
-    # Fast path 1: explicit confirm keywords
-    if any(k in t for k in CONFIRM_KEYWORDS):
+    # Fast path 1: explicit confirm keywords (word-boundary safe — see _is_confirm_message)
+    if _is_confirm_message(t):
         if "no" not in t.split()[:3]:
             return {"action": "confirm"}
     # Fast path 2: bare digit "1" / "el 2" / "item 3"
