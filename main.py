@@ -655,6 +655,41 @@ lugar, redirigílo:
 La razón: el inventario cambia, hay equivalencias entre sistemas, y un asesor humano
 puede revisar stock real y proponer alternativas. Decir "no hay" cierra la venta;
 redirigir mantiene la oportunidad abierta.
+
+═══════════════════════════════════════
+REGLA "NO DECIR NO MANEJAMOS" PARA CUALQUIER PRODUCTO (MUY IMPORTANTE)
+═══════════════════════════════════════
+Esta regla aplica a TODOS los productos (no solo MIG). NUNCA digas "no manejamos
+ese producto" / "no tenemos ese accesorio" / "esa marca no la trabajamos" SIN
+HABER VERIFICADO PRIMERO en el catálogo Zoho. Razones específicas:
+
+1. Muchos números de parte están guardados en `purchase_description` o `description`
+   de los items, NO siempre en el nombre visible. Ejemplo real: "BOQUILLA PARA PLASMA
+   9-8210 A.A." tiene "9-8215" guardado en su purchase_description. Si el cliente
+   pide "9-8215", la búsqueda lo encuentra — pero solo si hacés la búsqueda.
+
+2. Cuando el cliente menciona una marca (ThermalDynamics, Cutmaster, Victor, etc.)
+   o un modelo (SL100, Powermax 45, etc.), SUMIN suele tener equivalentes American
+   Alloy (A.A.) que sirven igual. NO declarar incompatibilidad sin chequear catálogo.
+
+3. Aunque la antorcha o máquina sea de una marca que normalmente "no trabajamos",
+   los CONSUMIBLES (electrodos, boquillas, toberas) frecuentemente sí están en
+   catálogo bajo otra etiqueta (American Alloy, SafeCut, etc.) — por compatibilidad
+   universal de las dimensiones físicas.
+
+FLUJO CORRECTO cuando el cliente menciona un número de parte (9-82XX, 11-35,
+51FN, 14-35, etc.) o un diagrama:
+  • Buscar CADA número en el catálogo (la búsqueda chequea name, sku, description
+    y purchase_description).
+  • Para los que SÍ existen → incluirlos en la cotización con el A.A. equivalente.
+  • Para los que NO existen → mencionar específicamente cuáles y pedir que
+    confirmen al +504 3334-0477.
+  • Si solo encontrás 1 de 5 que pidió, NO digas "no manejamos eso" — di "encontré
+    estos 1: [lista]; los otros 4 confirme con asesor".
+
+Decir "no manejamos" sin verificar es UN ERROR DE NEGOCIO que hace perder ventas
+reales (ej: SUMIN tiene 9-8215 A.A. con 744 unidades en stock, pero el bot dijo
+"no manejamos Cutmaster" porque vio el nombre de la antorcha en un diagrama).
 """
 
 SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante',
@@ -1420,26 +1455,40 @@ def _is_wa_brand(item: dict) -> bool:
 def _prefilter_catalog(query: str, catalog: list, top_n: int = 200) -> list:
     """Score each item by query-token overlap. Falls back to first `top_n` if no matches.
 
-    Brand bias: items with A.A. (American Alloy) get +1 point on ties — this
-    is SUMIN's preferred line. W.A. gets the same score as base. So when both
-    "ELECTRODO 7018 A.A." and "ELECTRODO 7018 W.A." match equally, A.A. wins.
+    Searches across name, SKU, description, and purchase_description — the last
+    two are critical because Daniel "esconde" part numbers like '9-8215' in
+    purchase_description rather than the visible name. Without that, customers
+    asking for those part numbers hit "no encontrado" even though the A.A.
+    equivalent is in stock.
+
+    Brand bias: items with A.A. (American Alloy) get +1 point on ties — SUMIN's
+    preferred line. So when both "ELECTRODO 7018 A.A." and "ELECTRODO 7018 W.A."
+    match equally, A.A. wins.
     """
     tokens = _query_tokens(query)
     if not tokens or not catalog:
         return catalog[:top_n]
     scored: list[tuple[int, int, float, dict]] = []
     for item in catalog:
-        name = (item.get("item_name") or "").lower()
-        sku  = (item.get("sku") or "").lower()
+        name      = (item.get("item_name") or "").lower()
+        sku       = (item.get("sku") or "").lower()
+        descr     = (item.get("description") or "").lower()
+        pdescr    = (item.get("purchase_description") or "").lower()
         score = 0
         for t in tokens:
             if t in name:
                 score += 2
             if t in sku:
                 score += 1
+            # Description fields catch part numbers SUMIN catalogs as
+            # purchase_description (e.g. "9-8215" hidden in BOQUILLA PARA
+            # PLASMA 9-8210 A.A.). Lower weight than name to avoid false
+            # positives on filler words.
+            if descr and t in descr:
+                score += 1
+            if pdescr and t in pdescr:
+                score += 2  # boost — part-numbers are usually in purchase_description
         if score > 0:
-            # Brand boost — sorts first by token-score, then by AA-preference,
-            # then by stock. AA gets boost=1, W.A. gets 0, others 0.
             brand_boost = 1 if _is_aa_brand(item) else 0
             stock = float(item.get("stock_on_hand") or 0)
             scored.append((score, brand_boost, stock, item))
@@ -1486,8 +1535,13 @@ def match_product_to_catalog(client_query: str, catalog: list,
         sku  = item.get("sku", "")
         rate = item.get("rate", 0)
         unit = item.get("unit", "")
+        # Include short hint of description / purchase_description so the LLM
+        # matcher can resolve queries that match by hidden part-number (e.g.
+        # "9-8215" in purchase_description for "BOQUILLA PARA PLASMA 9-8210 A.A.").
+        descr_hint = (item.get("purchase_description") or item.get("description") or "")[:60]
+        descr_part = f" | desc: {descr_hint}" if descr_hint else ""
         if name:
-            catalog_lines.append(f"SKU:{sku} | {name} | unit:{unit} | L.{rate}")
+            catalog_lines.append(f"SKU:{sku} | {name} | unit:{unit} | L.{rate}{descr_part}")
     catalog_text = "\n".join(catalog_lines)
 
     unit_hint = ""
@@ -2970,6 +3024,72 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
     pending = meta.get("pending_quote") or {}
 
     if pending.get("items"):
+        # Multi-message handling: if the user follows up with another quote
+        # request ("y agregame 100 lbs de 6011 1/8"), DON'T treat that as the
+        # customer name — merge the new items into pending_quote and re-ask
+        # the name. Without this fix, "y agregame X 100 lbs" got interpreted
+        # as a (failed) customer name → defaulted to Consumidor Final and the
+        # second item was lost.
+        # If the message contains a clear quantity+unit pattern (e.g.
+        # "100 lbs de 6011 1/8") OR an explicit add-trigger ("agregame",
+        # "tambien"), it's almost certainly an "add this too" rather than
+        # a customer name. Use word-boundary regex so "aceites Y DErivados"
+        # doesn't match "y de" as a substring.
+        _ADD_TRIGGER_RE = re.compile(
+            r"\b(agrega|agregame|agregue|también|tambien|ademas|además|"
+            r"sumale|añadile|añade|y\s+(?:agregame|también|tambien|de|el|la|los|las))\b",
+            re.IGNORECASE,
+        )
+        looks_like_more_items = (
+            bool(_QTY_PRODUCT_RE.search(text or ""))
+            or bool(_ADD_TRIGGER_RE.search(text or ""))
+        )
+        if looks_like_more_items:
+            extra_items, _ = extract_items_for_quote(text, history)
+            if extra_items:
+                # Resolve catalog matches for the extra items, append to pending
+                added_summary = []
+                added_not_found = list(pending.get("not_found", []))
+                added_unit_mm   = list(pending.get("unit_mismatches", []))
+                for req in extra_items:
+                    req_unit  = _normalize_unit(req.get("unit", ""))
+                    zoho_item = zoho_search_item_for_quote(req["product"], requested_unit=req_unit)
+                    if zoho_item and zoho_item.get("item_id"):
+                        z_unit = _normalize_unit(zoho_item.get("unit", ""))
+                        if req_unit and z_unit and req_unit != z_unit:
+                            added_unit_mm.append(req["product"])
+                            continue
+                        pending["items"].append({
+                            "item_id":  zoho_item["item_id"],
+                            "name":     zoho_item.get("item_name", req["product"]),
+                            "quantity": req.get("quantity", 1),
+                            "rate":     float(zoho_item.get("rate", 0) or 0),
+                            "unit":     zoho_item.get("unit", "UND"),
+                        })
+                        added_summary.append(
+                            f"{req.get('quantity', 1):g} {z_unit or 'UND'} {zoho_item.get('item_name','')[:40]}"
+                        )
+                    else:
+                        added_not_found.append(req["product"])
+                pending["not_found"] = added_not_found
+                pending["unit_mismatches"] = added_unit_mm
+                meta["pending_quote"] = pending
+                save_state(state)
+                log_action(
+                    "QuoteAgent", "merged_extra_items",
+                    f"added={len(added_summary)} not_found={len(added_not_found)}",
+                )
+                items_summary = ", ".join((li.get("name", "") or "")[:30] for li in pending["items"])
+                wa_send(
+                    from_number,
+                    "👍 Agregado a la cotización en proceso. Items actuales:\n"
+                    + "\n".join(f"  • {li.get('quantity',1):g} {li.get('unit','UND')} {li.get('name','')[:50]}"
+                                for li in pending["items"])
+                    + "\n\n¿A nombre de quién o de qué empresa le genero la cotización? "
+                    "(Si prefiere, escriba 'sin nombre' y la hago a nombre de Consumidor Final)",
+                )
+                return
+
         # Open name parsing — no "suggested" fallback.
         customer_name = _parse_quote_name_response_open(text)
         line_items = pending["items"]
