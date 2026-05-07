@@ -1290,16 +1290,25 @@ _DOT_FRAC_NORMALIZE: dict[str, str] = {
 }
 
 
+# When the customer says "manómetro" WITHOUT specifying a pressure range
+# ("0-30", "0-200") or face size ("1-1/2", "2 pulgadas", "200 PSI"), it's
+# colloquial Honduras for "regulador". Replace the word so the prefilter
+# doesn't keep literal MANOMETRO items at the top of the candidate list.
+_MANOMETRO_HAS_SPECS_RE = re.compile(
+    r"(\d+\s*-\s*\d+)|(\d+/\d+)|(\d+\s*pulgadas?)|(\d+\s*psi)",
+    re.IGNORECASE,
+)
+
+
 def _normalize_query_for_search(text: str) -> str:
     """Apply synonym expansion + mm→fraction + typo fixes before catalog search.
 
     Examples:
       'electrodo 7018 2.4 mm'      → 'electrodo 7018 3/32 (2.4 mm)'
-      'me genera 50 lbs de 7018 1.8' → 'me genera 50 lbs de 7018 1/8 (1.8)'
-      'manometro para acetileno'   → 'manometro regulador reg para acetileno'
+      'me genera 50 lbs de 7018 1.8' → 'me genera 50 lbs de 7018 1/8'
+      'manometro para acetileno'   → 'regulador para acetileno reg'  (REPLACE — no specs)
+      'manometro 0-30 1-1/2'        → 'manometro 0-30 1-1/2 regulador reg'  (APPEND — has specs)
       'varilla de carbon de 8 mm'  → 'varilla de carbon arcair de 5/16 (8 mm)'
-    The original tokens stay (so exact matches still work) — we just *append*
-    expansions in parentheses. Idempotent.
     """
     if not text:
         return text
@@ -1315,18 +1324,23 @@ def _normalize_query_for_search(text: str) -> str:
     out = re.sub(r"\b(\d+(?:\.\d+)?)\s*mm\b", _mm_repl, out, flags=re.IGNORECASE)
 
     # 2) "X.Y" without "mm" but in SUMIN fraction set → "X/Y"
-    # Only apply if exactly matches our typo dict (to not corrupt "2.4" without "mm").
     def _dot_repl(m):
         candidate = m.group(0)
         return _DOT_FRAC_NORMALIZE.get(candidate, candidate)
-    # Use word-boundary so we don't touch numbers inside SKUs.
     out = re.sub(r"\b\d+\.\d+\b", _dot_repl, out)
 
-    # 3) Synonym expansion (append, don't replace).
-    # Use word-boundary check so "reg" gets added even when "regulador" is in
-    # the text — Zoho indexes some items as abbreviated "REG. VICTOR..." and we
-    # need the token "reg" available for prefilter scoring.
+    # 3) Manómetro → regulador (with spec heuristic — see _MANOMETRO_HAS_SPECS_RE)
     out_lower = out.lower()
+    if "manometro" in out_lower or "manómetro" in out_lower:
+        if not _MANOMETRO_HAS_SPECS_RE.search(out):
+            # No specs → REPLACE the word entirely so prefilter prefers REG. items
+            out = re.sub(r"\bman[oó]metros?\b", "regulador", out, flags=re.IGNORECASE)
+            out_lower = out.lower()
+        # else: keep "manometro" + append synonyms below
+
+    # 4) Synonym expansion (append).
+    # Word-boundary check so "reg" gets added even when "regulador" is in the
+    # text — Zoho indexes some items abbreviated as "REG. VICTOR ESS32-...".
     additions = []
     for word, synonyms in _PRODUCT_SYNONYMS.items():
         if word in out_lower:
@@ -1347,7 +1361,17 @@ def _query_tokens(text: str) -> list[str]:
     """
     if not text:
         return []
+    original = text
     text = _normalize_query_for_search(text)
+    # Debug log so we can trace in production whether normalization actually
+    # ran for queries like "7018 2.4 mm". If logs show original==normalized
+    # for queries that should change, we know the issue is upstream.
+    if original != text:
+        try:
+            log_action("Catalog", "query_normalized",
+                       f"'{original[:80]}' → '{text[:80]}'")
+        except Exception:
+            pass
     s = re.sub(r"[¿?¡!.,;:()\"]", " ", text.lower())
     raw = s.split()
     out: list[str] = []
