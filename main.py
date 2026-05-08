@@ -2773,6 +2773,58 @@ def _match_score(query_tokens: set[str], candidate: str) -> float:
     return len(overlap) / len(query_tokens)
 
 
+def _authorize_pricebook(from_phone: str, customer_name: str) -> tuple[str, bool, str]:
+    """Anti-impersonation gate. Before applying a customer-specific pricebook
+    (Aceydesa, Standard Fruit, Azucarera del Norte, etc.) we ask the console
+    if `from_phone` is allowed to quote 'a nombre de {customer_name}'.
+
+    Returns (effective_customer_name, downgraded, message_to_send_back).
+      - effective_customer_name : el nombre que debemos usar en la cotización.
+      - downgraded              : True si tuvimos que pasar a Consumidor Final.
+      - message_to_send_back    : aviso al cliente (puede ser '').
+
+    Reglas:
+      • TRUSTED_NUMBERS internos: siempre pasan (devuelve customer_name tal cual).
+      • Cualquier otro: consultamos el console; si decision='deny' →
+        downgrade a 'Consumidor Final' y aviso al cliente.
+      • Si la consulta falla o decision='no_customer' / 'apply' → pasa.
+    """
+    if is_trusted_number(from_phone):
+        return customer_name, False, ""
+    if not customer_name or customer_name.strip().lower() in ("", "consumidor final"):
+        return customer_name or "Consumidor Final", False, ""
+    if not CONSOLE_API_URL or not INTERNAL_API_TOKEN:
+        # Sin console accesible no hay tabla de whitelist — fallback abierto
+        # para no romper bot en dev.
+        return customer_name, False, ""
+    try:
+        r = httpx.get(
+            f"{CONSOLE_API_URL}/internal/customers/authorize-check",
+            params={"phone": from_phone, "customer_name": customer_name},
+            headers={"X-Internal-Token": INTERNAL_API_TOKEN},
+            timeout=5,
+        )
+        if r.status_code != 200:
+            return customer_name, False, ""
+        data = r.json() or {}
+        decision = data.get("decision", "")
+        if decision == "deny":
+            real_name = data.get("customer_name", customer_name)
+            log_action(
+                "AntiImpersonation", "denied",
+                f"phone={from_phone} requested='{customer_name}' matched='{real_name}'",
+            )
+            msg = (
+                f"Para cotizar a nombre de *{real_name}* necesito que me escriba "
+                f"alguien autorizado de la empresa. Mientras tanto le hago la "
+                f"cotización con precio de lista."
+            )
+            return "Consumidor Final", True, msg
+    except Exception as e:
+        log_action("AntiImpersonation", "error", str(e)[:200])
+    return customer_name, False, ""
+
+
 def zoho_get_or_create_customer(name: str, phone: str) -> str | None:
     """Return contact_id for the given customer name.
 
@@ -3425,12 +3477,18 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
 
         # Open name parsing — no "suggested" fallback.
         customer_name = _parse_quote_name_response_open(text)
+        # v24: anti-impersonation. If the requesting phone is not authorized
+        # for the customer they're trying to quote 'a nombre de', downgrade
+        # to Consumidor Final and tell them.
+        customer_name, _downgraded, _antiimp_msg = _authorize_pricebook(from_number, customer_name)
+        if _antiimp_msg:
+            wa_send(from_number, _antiimp_msg)
         line_items = pending["items"]
         not_found = pending.get("not_found", [])
         unit_mismatches = pending.get("unit_mismatches", [])
         meta.pop("pending_quote", None)
         log_action("QuoteAgent", "resumed_pending",
-                   f"name='{customer_name}' items={len(line_items)}")
+                   f"name='{customer_name}' items={len(line_items)} downgraded={_downgraded}")
     else:
         items_requested, company_name_override = extract_items_for_quote(text, history)
 
@@ -3497,6 +3555,11 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
 
         if override_active:
             customer_name = company_name_override
+            # v24: anti-impersonation also for the override path (cliente
+            # menciona 'cotizar a nombre de Aceydesa' en el primer mensaje).
+            customer_name, _downgraded, _antiimp_msg = _authorize_pricebook(from_number, customer_name)
+            if _antiimp_msg:
+                wa_send(from_number, _antiimp_msg)
         else:
             # IMPORTANT: do NOT suggest the WhatsApp profile name. Many customers
             # use nicknames, emojis or informal handles in their WhatsApp profile
