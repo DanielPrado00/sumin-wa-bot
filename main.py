@@ -1644,6 +1644,12 @@ def match_product_to_catalog(client_query: str, catalog: list,
                 f"NUNCA elijas un vidrio.\n"
                 f"  • Si la consulta dice 'careta' sin más detalle: es una "
                 f"careta para soldadura, NO un vidrio.\n"
+                f"ELECTRODO 7018 — LÍNEA POR DEFECTO:\n"
+                f"  Si la consulta es '7018' (con o sin diámetro 1/8, 3/32, "
+                f"5/32) SIN especificar la línea (sin 'E-Strike', 'EW', 'PRO', "
+                f"etc.), elegí siempre la versión 'ESPECIAL' o A.A. ESPECIAL.\n"
+                f"  La línea E-Strike es de gama económica y NO es la default. "
+                f"Solo elegí E-Strike si el cliente lo pide por nombre.\n"
                 f"BOQUILLAS VICTOR — DEFAULT POR USO:\n"
                 f"  Si la consulta es 'boquilla #N marca Victor' (con N entre 1 y 5) "
                 f"SIN especificar uso (sin 'para corte', 'para soldar', 'para MIG', "
@@ -1845,7 +1851,8 @@ def sales_agent(from_number: str, from_name: str, text: str, state: dict):
     _update_city_from_text(meta, text, history)
     city_ctx = _build_city_context(meta)
     zoho_ctx = zoho_inventory_context(text, history=history)
-    system = SUMIN_SYSTEM + city_ctx + zoho_ctx
+    mig_ctx = _build_mig_attended_context(meta)
+    system = SUMIN_SYSTEM + city_ctx + zoho_ctx + mig_ctx
     response = claude_respond(system, history, text)
 
     # If Claude asked about city in this response, mark it as asked so we don't
@@ -1860,6 +1867,33 @@ def sales_agent(from_number: str, from_name: str, text: str, state: dict):
     wa_send(from_number, response)
     log_action("SalesAgent", "sent_response", response[:100])
     save_state(state)
+
+def _build_mig_attended_context(meta: dict) -> str:
+    """If this conversation already had its MIG handoff resolved (Daniel
+    replied with a system number), inject a context block so the LLM does
+    NOT loop back into 'pedir foto del difusor' when the customer asks for
+    boquilla/tobera/difusor for that system. v23 fix."""
+    info = meta.get("mig_attended") or {}
+    if not info:
+        return ""
+    try:
+        if datetime.fromisoformat(info.get("until", "")) < datetime.now():
+            return ""
+    except Exception:
+        return ""
+    system_name = info.get("system_name", "")
+    return (
+        "\n\n═══ MIG HANDOFF YA ATENDIDO (CONTEXTO DE ESTA CONV) ═══\n"
+        f"En mensajes anteriores ya identificamos que el consumible MIG del "
+        f"cliente corresponde al sistema **{system_name}**. NO volver a pedir "
+        f"foto del difusor — esa foto ya fue analizada por un asesor humano. "
+        f"Si el cliente ahora pide 'boquilla', 'tobera', 'difusor' o 'set "
+        f"completo' SIN otro contexto nuevo, DAR PRECIOS DIRECTOS para el "
+        f"sistema {system_name} y proceder con la cotización (cantidad y modo "
+        f"de retiro). Solo pedir foto del difusor si el cliente menciona OTRO "
+        f"consumible distinto al ya identificado.\n"
+    )
+
 
 # Hints en la respuesta del modelo de visión que indican que el cliente mandó un
 # consumible MIG (difusor, portacontacto, tobera, antorcha). En esos casos hay tantas
@@ -3677,6 +3711,15 @@ def _try_consume_mig_handoff(from_number: str, text: str, state: dict) -> bool:
             + (f"Le adjunté tu nota: «{extra[:100]}»" if extra else "")
             + (f"\n\nPendientes restantes: {len(fresh)}" if fresh else ""),
         )
+        # v23: mark the customer's conv as "MIG attended" so the next message
+        # ("sí porfa de boquilla, difusor y tobera") doesn't trigger the
+        # generic 'pedir foto del difusor' rule and create a loop.
+        from datetime import timedelta
+        c_meta = get_conv_meta(state, customer)
+        c_meta["mig_attended"] = {
+            "system_name": system_name,
+            "until": (datetime.now() + timedelta(hours=24)).isoformat(),
+        }
         save_state(state)
         log_action("MIGHandoff", "consumed", f"customer={customer} system={system_name}")
         return True
@@ -3836,7 +3879,8 @@ def orchestrate(message_data: dict):
             _update_city_from_text(meta, text, history)
             city_ctx = _build_city_context(meta)
             zoho_ctx = zoho_inventory_context(text, history=history)
-            system_with_ctx = SUMIN_SYSTEM + city_ctx + zoho_ctx + photo_ctx
+            mig_ctx = _build_mig_attended_context(meta)
+            system_with_ctx = SUMIN_SYSTEM + city_ctx + zoho_ctx + photo_ctx + mig_ctx
             response = claude_respond(system_with_ctx, history, text)
             if not meta.get("ciudad") and bot_asked_city(response):
                 meta["city_asked"] = True
