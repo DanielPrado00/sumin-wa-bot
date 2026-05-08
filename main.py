@@ -116,6 +116,20 @@ def is_trusted_number(phone: str) -> bool:
 # advisory. Kept separate from TRUSTED_NUMBERS for clarity.
 DANIEL_PHONE = "50497041381"
 
+# v10b: when a customer sends a MIG-consumable photo, we forward it to Daniel
+# with a numbered list of MIG systems we stock. If Daniel later replies with a
+# number (1-6), the bot relays the system info back to the customer in natural
+# Spanish. The mapping is human-readable and matches what gets sent to him.
+MIG_SYSTEM_BY_NUMBER: dict[str, str] = {
+    "1": "Miller serie 169",
+    "2": "M25 / Magnum 200",
+    "3": "M250 / Magnum 250",
+    "4": "MDX Miller (modelo nuevo)",
+    "5": "tipo Binzel",
+    "6": "serie HD",
+}
+MIG_HANDOFF_TTL_MIN = 240  # 4h — Daniel a veces tarda en responder
+
 # Phone we tell customers to call when we can't fully resolve via bot.
 ELECTRODE_REDIRECT_PHONE_HUMAN = "+504 3334-0477"
 
@@ -2394,10 +2408,24 @@ def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str
                 "4️⃣ MDX Miller nuevo (3 piezas)\n"
                 "5️⃣ Tipo Binzel (3 piezas)\n"
                 "6️⃣ Serie HD (3 piezas)\n\n"
-                "Respondele al cliente directo. (En v11 vas a poder responder "
-                "el número aquí y el bot le manda lista vague + total al cliente.)"
+                "✏️ Respondé un número (1-6) y opcionalmente notas, ej:\n"
+                "  *1*  → bot le dice al cliente que su sistema es Miller 169\n"
+                "  *2 le aclaramos que tenemos boquilla y difusor en stock*\n"
+                "Si querés contestarle vos directo, escribile sin número."
             )
             wa_send(DANIEL_PHONE, handoff_note)
+            # v10b: register a pending handoff so the next number-prefixed
+            # reply from Daniel gets routed back to this customer. Stored
+            # under Daniel's own conv meta so it's namespace-clean.
+            from datetime import timedelta
+            d_meta = get_conv_meta(state, DANIEL_PHONE)
+            d_meta.setdefault("mig_handoffs", []).append({
+                "customer_phone": from_number,
+                "customer_name": from_name or "",
+                "product_info": product_info[:500],
+                "expires_at": (datetime.now() + timedelta(minutes=MIG_HANDOFF_TTL_MIN)).isoformat(),
+            })
+            save_state(state)
             log_action("VisionAgent", "mig_handoff_forwarded_to_daniel", from_number)
         except Exception as e:
             log_action("VisionAgent", "mig_handoff_forward_error", str(e)[:200])
@@ -3591,6 +3619,75 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
 # ─── ORCHESTRATOR ────────────────────────────────────────────────────────────
 # ════════════════════════════════════════════════════════════════════════════════
 
+_MIG_HANDOFF_REPLY_RE = re.compile(r"^\s*([1-6])\s*[:\.\)\-]?\s*(.*)$", re.DOTALL)
+
+
+def _try_consume_mig_handoff(from_number: str, text: str, state: dict) -> bool:
+    """If `text` is a numbered MIG handoff reply from Daniel and there is a
+    pending handoff for him, dispatch the appropriate vague message to the
+    waiting customer and consume the handoff. Returns True if consumed."""
+    if from_number != DANIEL_PHONE:
+        return False
+    m = _MIG_HANDOFF_REPLY_RE.match(text or "")
+    if not m:
+        return False
+    number = m.group(1)
+    extra = (m.group(2) or "").strip()
+    system_name = MIG_SYSTEM_BY_NUMBER.get(number)
+    if not system_name:
+        return False
+    d_meta = get_conv_meta(state, DANIEL_PHONE)
+    handoffs = d_meta.get("mig_handoffs", []) or []
+    # Drop expired handoffs first.
+    now = datetime.now()
+    fresh = []
+    for h in handoffs:
+        try:
+            if datetime.fromisoformat(h.get("expires_at", "")) > now:
+                fresh.append(h)
+        except Exception:
+            pass
+    if not fresh:
+        d_meta["mig_handoffs"] = []
+        save_state(state)
+        return False
+    # FIFO: oldest pending handoff is the one Daniel is replying to. (If the
+    # mapping ever feels wrong he can ping again with a fresh photo.)
+    target = fresh.pop(0)
+    d_meta["mig_handoffs"] = fresh
+    customer = target["customer_phone"]
+    customer_name = target.get("customer_name", "") or ""
+    first_name = customer_name.split()[0] if customer_name else "estimado cliente"
+
+    msg_to_customer = (
+        f"¡Hola {first_name}! 👋 Identificamos su consumible: corresponde al "
+        f"sistema MIG **{system_name}**. Manejamos boquilla, tobera y difusor "
+        f"para esa línea."
+    )
+    if extra:
+        msg_to_customer += f"\n\n{extra}"
+    msg_to_customer += "\n\n¿Le confirmo precio y disponibilidad? (cantidad y modo de retiro)"
+
+    try:
+        wa_send(customer, msg_to_customer)
+        wa_send(
+            DANIEL_PHONE,
+            f"✅ Mandé al cliente {customer_name or '(sin nombre)'} ({customer}) "
+            f"que su sistema es {system_name}. "
+            + (f"Le adjunté tu nota: «{extra[:100]}»" if extra else "")
+            + (f"\n\nPendientes restantes: {len(fresh)}" if fresh else ""),
+        )
+        save_state(state)
+        log_action("MIGHandoff", "consumed", f"customer={customer} system={system_name}")
+        return True
+    except Exception as e:
+        log_action("MIGHandoff", "send_error", str(e)[:200])
+        # Restore the handoff so Daniel can retry.
+        d_meta["mig_handoffs"] = [target] + fresh
+        save_state(state)
+        return False
+
+
 def orchestrate(message_data: dict):
     time.sleep(10)
 
@@ -3687,6 +3784,11 @@ def orchestrate(message_data: dict):
 
         if re.fullmatch(r"[a-zA-Z]{2,5}\d{4,8}", text.strip()):
             log_action("Orchestrator", "skipped_zoho_code", text)
+            return
+
+        # v10b: if Daniel replies with a number (1-6) and there is a pending
+        # MIG handoff, dispatch the answer to the customer and return.
+        if _try_consume_mig_handoff(from_number, text, state):
             return
 
         # If a quote was just sent and is awaiting confirmation/correction by
