@@ -706,11 +706,36 @@ FLUJO CORRECTO cuando el cliente menciona un número de parte (9-82XX, 11-35,
 Decir "no manejamos" sin verificar es UN ERROR DE NEGOCIO que hace perder ventas
 reales (ej: SUMIN tiene 9-8215 A.A. con 744 unidades en stock, pero el bot dijo
 "no manejamos Cutmaster" porque vio el nombre de la antorcha en un diagrama).
+
+═══════════════════════════════════════
+PRODUCTOS QUE SUMIN NO MANEJA (SÍ DECIR "NO MANEJAMOS" PARA ESTOS)
+═══════════════════════════════════════
+Excepción a la regla anterior — para esta lista corta y específica, SÍ avisar
+al cliente que SUMIN no los maneja, sin intentar buscar en catálogo:
+
+• DISCOS ABRASIVOS (de corte, flap, lija, desbaste) — son ferretería general,
+  no soldadura. Decir: "esos son productos de ferretería, no los manejamos
+  directamente — pero estamos para servirle con electrodos, MIG, EPP, oxicorte
+  y todo lo de soldadura."
+• ESMERIL, lijas para esmeril, piedras de afilar — mismo trato.
+• Herramienta manual general (martillos, alicates, llaves) — no maneja.
+
+NO inventar precios ni "verificar stock" para estos. Decir directo que no es
+nuestro rubro y redirigir a lo que sí vendemos.
+
+EQUIVALENCIAS DE NOMBRE QUE EL CLIENTE USA ↔ NOMBRE EN ZOHO:
+• "INCONEL" / "inconel 182" / "inconel 82" → buscalo en catálogo como
+  "NiCrFe-3" (es el mismo electrodo bajo el nombre AWS — SUMIN lo factura
+  como NiCrFe-3, no como INCONEL).
+• "electrodo 800" / "E800" → también es NiCrFe-3.
 """
 
 SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante',
                    'chaqueta', 'alambre', 'oxicorte', 'sumin', 'epp', 'protección',
-                   'delantal', 'escudo', 'varilla', 'disco', 'lija', 'esmeril']
+                   'delantal', 'escudo', 'varilla']
+# NOTA: 'disco', 'lija', 'esmeril' fueron RETIRADOS de las keywords — SUMIN
+# no maneja esos productos. Si el cliente pregunta por ellos, el bot debe
+# decir explícitamente que SUMIN no los maneja y sugerir una ferretería.
 
 # ─── PRODUCT IMAGES ──────────────────────────────────────────────────────────
 PRODUCT_IMAGES: dict[str, list[str]] = {
@@ -1080,8 +1105,16 @@ def try_extract_order_from_image(image_bytes: bytes, mime_type: str = "image/jpe
         "- tiene un check ✓ que indica 'ya pedido / ya entregado'.\n\n"
         "PRODUCTOS típicos: electrodos (6011, 6013, 7018, 309-16, 7018-1, 7024, "
         "INCONEL/E NiCrFe-3, electrodo 800, tungsteno TIG), alambre MIG/TIG, varillas, "
-        "discos abrasivos, caretas, guantes, gas. Si una línea es ambigua, igual ponela "
+        "caretas, guantes, gas. Si una línea es ambigua, igual ponela "
         "en items con el texto que mejor leas + agregale ' [verificar]' al final del product.\n\n"
+        "⛔ SUMIN NO MANEJA — si aparece en la lista, ponelo en `excluded` con "
+        "motivo='SUMIN no maneja': discos abrasivos, discos de corte, discos "
+        "flap/lija, esmeril, piedras de afilar. Estos son productos de ferretería "
+        "general que SUMIN no vende — no ofrecer ni intentar cotizar.\n"
+        "🔁 EQUIVALENCIAS DE NOMBRES (mapeá al nombre que SUMIN usa):\n"
+        "  • 'INCONEL', 'inconel 182', 'inconel 82' → 'electrodo NiCrFe-3' (es el mismo "
+        "    consumible bajo el nombre AWS — SUMIN lo factura como NiCrFe-3).\n"
+        "  • 'electrodo 800', 'E800' → 'electrodo NiCrFe-3' también, mismo material.\n\n"
         "━━━ FRACCIONES DE ELECTRODO (CRÍTICO) ━━━\n"
         "En SUMIN las fracciones de electrodo son SIEMPRE una de este set cerrado:\n"
         "  1/16, 5/64, 3/32, 1/8, 5/32, 3/16, 7/32, 1/4, 5/16, 3/8\n"
