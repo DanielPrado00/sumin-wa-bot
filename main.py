@@ -21,8 +21,21 @@ LOG_FILE   = "bot_log.json"
 CONSOLE_API_URL = os.environ.get("CONSOLE_API_URL", "")
 INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "")
 
-def forward_to_console(direction: str, phone: str, name: str, body: str, msg_type: str = "text"):
-    """Fire-and-forget POST to sumin-console-backend so the bandeja mirrors WA."""
+def forward_to_console(
+    direction: str,
+    phone: str,
+    name: str,
+    body: str,
+    msg_type: str = "text",
+    wa_media_id: str = "",
+    media_mime: str = "",
+    media_caption: str = "",
+):
+    """Fire-and-forget POST to sumin-console-backend so the bandeja mirrors WA.
+
+    For image/audio/document messages, pass `wa_media_id` + `media_mime` so the
+    console can lazy-fetch the binary later via /api/messages/{id}/media.
+    """
     if not CONSOLE_API_URL or not INTERNAL_API_TOKEN:
         return
     try:
@@ -34,6 +47,9 @@ def forward_to_console(direction: str, phone: str, name: str, body: str, msg_typ
                 "name": name or "",
                 "body": body or "",
                 "msg_type": msg_type,
+                "wa_media_id": wa_media_id,
+                "media_mime": media_mime,
+                "media_caption": media_caption,
             },
             headers={"X-Internal-Token": INTERNAL_API_TOKEN},
             timeout=5,
@@ -3557,11 +3573,28 @@ def orchestrate(message_data: dict):
         _inbound_text = message_data.get("text", {}).get("body", "")
         forward_to_console("inbound", from_number, from_name, _inbound_text)
     elif msg_type == "image":
-        forward_to_console("inbound", from_number, from_name, "[imagen]", "image")
+        _img = message_data.get("image", {}) or {}
+        forward_to_console(
+            "inbound", from_number, from_name, "[imagen]", "image",
+            wa_media_id=_img.get("id", ""),
+            media_mime=_img.get("mime_type", "image/jpeg"),
+            media_caption=_img.get("caption", ""),
+        )
     elif msg_type == "audio":
-        forward_to_console("inbound", from_number, from_name, "[audio]", "audio")
+        _aud = message_data.get("audio", {}) or {}
+        forward_to_console(
+            "inbound", from_number, from_name, "[audio]", "audio",
+            wa_media_id=_aud.get("id", ""),
+            media_mime=_aud.get("mime_type", "audio/ogg"),
+        )
     elif msg_type == "document":
-        forward_to_console("inbound", from_number, from_name, "[documento]", "document")
+        _doc = message_data.get("document", {}) or {}
+        forward_to_console(
+            "inbound", from_number, from_name, "[documento]", "document",
+            wa_media_id=_doc.get("id", ""),
+            media_mime=_doc.get("mime_type", "application/pdf"),
+            media_caption=_doc.get("filename", "") or _doc.get("caption", ""),
+        )
 
     # If a human took over this conversation in the console, do NOT respond.
     if is_conversation_paused(from_number):
