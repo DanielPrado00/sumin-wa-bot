@@ -1362,6 +1362,12 @@ _PRODUCT_SYNONYMS: dict[str, list[str]] = {
     # Forzamos "vidrio" → texto que prioriza el match de careta.
     "vidrio":   ["careta", "claro", "oscuro"],
     "vidrios":  ["careta", "claros", "oscuros"],
+    # v25.2: SUMIN cataloga el microalambre ER70S-6 de forma inconsistente —
+    # algunos variants dicen "MICROALAMBRE", otros "MICROALAMBRE COBRIZADO" o
+    # "MICROALAMBRE COBRIZ". Todo ER70S-6 viene cobrizado por construcción, así
+    # que cuando el cliente pide "microalambre" expandimos para que el prefilter
+    # ranke también los items con "cobrizado" / "cobriz".
+    "microalambre": ["cobrizado", "cobriz"],
 }
 
 
@@ -1682,6 +1688,30 @@ def match_product_to_catalog(client_query: str, catalog: list,
                 f"por 3x. Si ningún variant matchea el peso pedido, responde "
                 f"NINGUNO (es mejor decir 'no encontré' que entregar el variant "
                 f"incorrecto).\n"
+                f"MICROALAMBRE / COBRIZADO — son SINÓNIMOS para ER70S-6 (v25.2):\n"
+                f"  SUMIN cataloga el microalambre ER70S-6 de forma INCONSISTENTE\n"
+                f"  entre variants — algunos dicen 'MICROALAMBRE ER70S-6', otros\n"
+                f"  'MICROALAMBRE COBRIZADO ER70S-6' o 'MICROALAMBRE COBRIZ ER70S-6'.\n"
+                f"  TODO el ER70S-6 (también el ER70S-3, ER70S-7) viene cobrizado\n"
+                f"  (copper-coated) por construcción del alambre — es el mismo\n"
+                f"  producto bajo nombres distintos. Cuando el cliente pide\n"
+                f"  'microalambre ER70S-6' sin más, los siguientes variants son\n"
+                f"  TODOS válidos y debés elegir entre ellos discriminando SOLO\n"
+                f"  por diámetro + peso del rollo:\n"
+                f"    • 'MICROALAMBRE ER70S-6 0.035\" 11 LBS'\n"
+                f"    • 'MICROALAMBRE COBRIZADO ER70S-6 0.035\" ROLLO 33 LBS'\n"
+                f"    • 'MICROALAMBRE COBRIZ 0.045\" ER70S-6 33 LBS'\n"
+                f"  NO devuelvas NINGUNO solo porque el nombre del catálogo tiene\n"
+                f"  'COBRIZADO' o 'COBRIZ' extra — si el alloy + diámetro + peso\n"
+                f"  coinciden, ES el producto que pide el cliente.\n"
+                f"MARCAS DE MICROALAMBRE — equivalencias SUMIN:\n"
+                f"  SUMIN NO importa Lincoln, Hobart, ESAB ni Miller para alambre\n"
+                f"  MIG. Vende el equivalente americano (A.A. American Alloy) o\n"
+                f"  sin marca explícita. Cuando el cliente pide 'MARCA LINCOLN'\n"
+                f"  o 'Hobart' o cualquier marca importada para microalambre,\n"
+                f"  IGNORÁ la marca y matcheá por alloy (ER70S-6, ER70S-3, etc.)\n"
+                f"  + diámetro + peso. El equivalente que vende SUMIN cumple la\n"
+                f"  misma AWS specification.\n"
                 f"Responde SOLO el SKU exacto del producto, sin explicaciones. "
                 f"Si no hay match claro, responde NINGUNO."}]
         ).content[0].text.strip()
