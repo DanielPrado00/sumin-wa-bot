@@ -1427,6 +1427,15 @@ def _normalize_query_for_search(text: str) -> str:
         return text
     out = text
 
+    # 0) v25: weight canonicalization. Customers/orders write the rollo weight
+    #    in many shapes: "33LB", "33lbs", "33 libras", "X 33LB". The Zoho
+    #    catalog has them as "33 LBS" (with space). Without normalization,
+    #    "33lb" is NOT a substring of "33 lbs" and the prefilter can't
+    #    discriminate the 33-lb variant from 11-lb variant — both score the
+    #    same because the alloy/diameter tokens dominate. Canonicalize to
+    #    " <N> lbs " so the substring match in _prefilter_catalog works.
+    out = re.sub(r"(\d+)\s*(?:lbs?|libras?)\b", r"\1 lbs", out, flags=re.IGNORECASE)
+
     # 1) "X.Y mm" → "X/Y" (mm to fraction)
     def _mm_repl(m):
         mm = m.group(1)
@@ -1662,6 +1671,17 @@ def match_product_to_catalog(client_query: str, catalog: list,
                 f"  • 'boquilla para PLASMA' → traen número de parte alfanumérico "
                 f"(9-8215, 9-8210, etc.). Si la consulta tiene ese formato, es plasma.\n"
                 f"  • 'boquilla para TIG'    → cerámica gas lens / 53N87 / similar.\n"
+                f"PESO DEL ROLLO/SPOOL (CRÍTICO — bug v24): si la consulta menciona "
+                f"un peso específico del rollo (ej. '33 LB', '33LBS', '33 libras', "
+                f"'11 lbs', '44 lbs') Y los candidatos del catálogo tienen pesos "
+                f"distintos en el nombre (típicamente microalambre/MIG viene en "
+                f"rollos de 11 LBS, 33 LBS, 44 LBS, etc.), elegí EXCLUSIVAMENTE "
+                f"el variant cuyo nombre contiene ese mismo peso. NO elijas un "
+                f"variant de 11 LBS si el cliente pidió 33 LBS — un rollo de 33 "
+                f"libras NO es lo mismo que uno de 11 libras y el precio difiere "
+                f"por 3x. Si ningún variant matchea el peso pedido, responde "
+                f"NINGUNO (es mejor decir 'no encontré' que entregar el variant "
+                f"incorrecto).\n"
                 f"Responde SOLO el SKU exacto del producto, sin explicaciones. "
                 f"Si no hay match claro, responde NINGUNO."}]
         ).content[0].text.strip()
@@ -2121,7 +2141,18 @@ def _parse_confirmation_response(text: str, items: list[dict]) -> dict:
         f"  los items y devolvé el item_index correcto (1-{items_count}).\n"
         f"- Múltiples correcciones en un solo mensaje: devolvé TODAS en \"corrections\".\n"
         f"- Si el usuario corrige cantidad: field=\"quantity\", new_value es número.\n"
-        f"- Si corrige producto/diámetro: field=\"product\", new_value es string.\n\n"
+        f"- Si corrige producto/diámetro: field=\"product\", new_value es string.\n"
+        f"- PESO DEL ROLLO vs CANTIDAD (crítico — bug v24):\n"
+        f"  Un peso como '33 lbs' / '33 libras' / '11 LB' puede ser AMBIGUO.\n"
+        f"  Regla: si el item actual tiene un peso en su nombre (ej.\n"
+        f"  'MICROALAMBRE 11 LBS' o 'ROLLO 0.045 X 11 LBS') y el usuario\n"
+        f"  menciona un peso DISTINTO ('33 lbs', 'de 33 libras', 'er70s-6 de\n"
+        f"  33 lbs'), entonces es un CAMBIO DE VARIANT (otro rollo del mismo\n"
+        f"  alambre pero en presentación distinta) — NO es la cantidad de\n"
+        f"  rollos. field=\"product\", new_value es el mensaje completo del\n"
+        f"  usuario para que el matcher elija el rollo correcto.\n"
+        f"  Solo es cantidad si el usuario dice algo como 'cantidad 33',\n"
+        f"  'son 33', '33 rollos', 'quiero 33', '33 unidades' (sin lbs/libras).\n\n"
         f"Ejemplos:\n"
         f'  "el 6011 eran 800 y el 800 eran 200" →\n'
         f'    {{"action":"corrections","corrections":[\n'
@@ -2129,6 +2160,11 @@ def _parse_confirmation_response(text: str, items: list[dict]) -> dict:
         f'       {{"item_index":<idx_800>, "field":"quantity", "new_value":200}}\n'
         f"     ]}}\n"
         f'  "1: cantidad 800" → corrections con un solo item\n'
+        f'  "el 1: er70s-6 de 33 lbs" (item actual es MICROALAMBRE 11 LBS) →\n'
+        f'    {{"action":"corrections","corrections":[\n'
+        f'       {{"item_index":1, "field":"product", "new_value":"er70s-6 de 33 lbs"}}\n'
+        f"     ]}}\n"
+        f'  "el 1: 33 rollos" → quantity=33 (no menciona lbs/libras)\n'
         f'  "todo bien" → confirm\n'
         f'  "cancela / dejar pendiente" → cancel'
     )
@@ -3153,13 +3189,25 @@ _QUOTE_NONAME_WORDS = {
 # we can route the message back through the item-resolution flow instead.
 _TECH_CLARIF_RE = re.compile(
     r"\b("
-    r"boquilla|tip|punta|electrodo|alambre|disco|guante|careta|"
-    r"vidrio|regulador|man[oó]metro|antorcha|"
+    # v25: added "producto" / "rollo" / "microalambre" / "spool" because
+    # customers sometimes reply to the "¿A nombre de quién?" prompt with a
+    # product clarification like "de 33 libras es el producto" — those words
+    # should never be saved as a customer name.
+    r"boquilla|tip|punta|electrodo|alambre|microalambre|rollo|spool|"
+    r"disco|guante|careta|"
+    r"vidrio|regulador|man[oó]metro|antorcha|producto|"
     r"oxicorte|corte|soldar|soldadura|plasma|mig|tig|"
     r"acetileno|arg[oó]n|propano|"
     r"victor|harris|smith|cebora|hypertherm|panasonic|lincoln|"
+    # MIG/TIG alloy specs: ER70S, ER80S, ER90S, ER308L, ER309L, ER316L,
+    # ER70S-6, etc. — anchor on the prefix so e.g. "er70s-6" is detected.
+    r"er[1-9]\d{2}[a-z]?-?\d*|er[7-9]0s-?\d?|"
     r"6010|6011|6013|6018|7018|7024|3[01]\d|"
-    r"\d+/\d+|\d+\s*mm|\d+\s*lb|\d+\s*und|\d+-\d+-\d+"
+    # Weight/quantity hints. lbs?/libras? both supported. Note: \b in the
+    # outer group requires the unit to NOT be followed by a letter — that's
+    # why "33 lb" (alone) matches but "33 libras" needs its own branch
+    # (\b would fail between "lb" and "i").
+    r"\d+/\d+|\d+\s*mm|\d+\s*lbs?|\d+\s*libras?|\d+\s*und|\d+-\d+-\d+"
     r")\b",
     re.IGNORECASE,
 )
