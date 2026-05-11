@@ -180,6 +180,24 @@ check(
     "v25: '33lbX' (no es unidad) NO se canonicaliza",
     "33lbX" in main._normalize_query_for_search("33lbX no es peso"),
 )
+# v25.2: bug del 11-may-26 (parte 2) — el matcher devolvió NINGUNO para
+# "MICROALAMBRE 33 LB" porque el catálogo lo tiene como "MICROALAMBRE
+# COBRIZADO ER70S-6 ... 33 LBS". Verificamos que el sinónimo está agregado
+# para que el prefilter incluya el variant correcto.
+_norm = main._normalize_query_for_search("rollo microalambre 0.035 33LB er70s-6")
+check(
+    "v25.2: 'microalambre' expande sinónimo 'cobrizado' para matchear catálogo",
+    "cobrizado" in _norm.lower(),
+)
+check(
+    "v25.2: 'microalambre' expande sinónimo 'cobriz' (variant 0.045 33 LBS)",
+    "cobriz" in _norm.lower(),
+)
+# Regression guard: si el query NO tiene "microalambre", NO agregamos cobrizado.
+check(
+    "v25.2: query sin microalambre NO agrega cobrizado",
+    "cobrizado" not in main._normalize_query_for_search("electrodo 6011 1/8").lower(),
+)
 
 # 1.5 Hint extraction.
 check(
