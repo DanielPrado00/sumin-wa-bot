@@ -133,6 +133,53 @@ check(
     "'Azucarera del Norte' NO es aclaración (es nombre)",
     not main._looks_like_product_clarification("Azucarera del Norte"),
 )
+# v25: bug del 11-may-26 — "de 33 libras es el producto" se aceptó como nombre.
+# El regex original solo aceptaba "\d+\s*lb" (sin la s) y no tenía "producto"
+# ni "rollo" / "microalambre" como triggers. Fix verificado abajo.
+check(
+    "v25: 'de 33 libras es el producto' detectado como aclaración (no nombre)",
+    main._looks_like_product_clarification("de 33 libras es el producto"),
+)
+check(
+    "v25: '33 lbs' detectado como aclaración",
+    main._looks_like_product_clarification("33 lbs"),
+)
+check(
+    "v25: 'er70s-6 de 33 lbs' (correction-style reply) detectado como aclaración",
+    main._looks_like_product_clarification("er70s-6 de 33 lbs"),
+)
+check(
+    "v25: 'rollo de microalambre' detectado como aclaración",
+    main._looks_like_product_clarification("rollo de microalambre"),
+)
+# v25: regresión guard — nombres reales con números o sufijos S.A. que NO
+# deben pasar como aclaración aunque tengan algún token sospechoso.
+check(
+    "v25: 'Constructora García S.A.' NO es aclaración (regression guard)",
+    not main._looks_like_product_clarification("Constructora García S.A."),
+)
+
+# v25: weight canonicalization in query normalizer. Customers write the rollo
+# weight in many shapes; we canonicalize to "<N> lbs" before tokenization so
+# the prefilter substring-matches against Zoho's "33 LBS" names.
+check(
+    "v25: '33LB' → '33 lbs' (canonicalizado)",
+    "33 lbs" in main._normalize_query_for_search("rollo microalambre 33LB er70s-6"),
+)
+check(
+    "v25: '33 libras' → '33 lbs' (canonicalizado)",
+    "33 lbs" in main._normalize_query_for_search("33 libras de microalambre"),
+)
+check(
+    "v25: '11 LBS' (ya correcto) se mantiene como '11 lbs'",
+    "11 lbs" in main._normalize_query_for_search("11 LBS rollo"),
+)
+# Guard: no canonicalizar palabras que NO son unidad (ej. "33lbX" donde sigue
+# una letra) — el regex tiene \b al final.
+check(
+    "v25: '33lbX' (no es unidad) NO se canonicaliza",
+    "33lbX" in main._normalize_query_for_search("33lbX no es peso"),
+)
 
 # 1.5 Hint extraction.
 check(
