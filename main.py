@@ -999,7 +999,24 @@ def log_action(agent: str, action: str, detail: str):
     except:
         pass
 
+# v28: TEST MODE infra — when /debug/chat is hit, we set _TEST_CAPTURE to
+# a list and route wa_send through it instead of calling WhatsApp's API.
+# Thread-local so concurrent /debug/chat requests don't cross-contaminate.
+import threading
+_TEST_STATE = threading.local()
+
+
+def _is_test_mode() -> bool:
+    return getattr(_TEST_STATE, "capture", None) is not None
+
+
 def wa_send(to: str, text: str):
+    # v28: in test mode, capture the message instead of sending via WhatsApp API
+    if _is_test_mode():
+        _TEST_STATE.capture.append({"to": to, "text": text})
+        log_action("WA_SEND", f"→ {to} [TEST_MODE]", text[:100])
+        return {"messages": [{"id": "test-captured"}], "test_mode": True}
+
     url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {WA_TOKEN}", "Content-Type": "application/json"}
     body = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
@@ -4489,6 +4506,137 @@ async def zoho_callback(request: Request):
 @app.get("/health")
 async def health():
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
+
+
+# ─── DEBUG TEST ENDPOINT (v28) ───────────────────────────────────────────────
+# Lets you run the bot pipeline without sending real WhatsApp messages.
+# Auth: requires X-Debug-Token header matching DEBUG_TOKEN env var.
+# Body: {"phone": "504XXXXXXXX", "text": "...", "reset_state": false,
+#        "msg_type": "text" (or "image"), "media_id": "...", "sleep": false}
+# Returns: {"replies": [{"to": "...", "text": "..."}, ...]}
+# Each customer query → list of replies the bot would have sent.
+#
+# Usage example:
+#   curl -X POST https://sumin-wa-bot.onrender.com/debug/chat \
+#     -H "X-Debug-Token: $DEBUG_TOKEN" \
+#     -H "Content-Type: application/json" \
+#     -d '{"phone": "test-001", "text": "alambre 0.035 11 lbs"}'
+@app.post("/debug/chat")
+async def debug_chat(request: Request):
+    """Run the bot pipeline on a single message WITHOUT calling WhatsApp API."""
+    debug_token = os.environ.get("DEBUG_TOKEN")
+    if not debug_token:
+        return Response(status_code=503, content="DEBUG_TOKEN not configured on server")
+    if request.headers.get("x-debug-token") != debug_token:
+        return Response(status_code=401, content="bad token")
+
+    body = await request.json()
+    phone = body.get("phone", "test-debug-001")
+    text  = body.get("text", "")
+    reset = bool(body.get("reset_state", False))
+    msg_type = body.get("msg_type", "text")
+    sleep_first = bool(body.get("sleep", False))
+
+    # Reset state for this phone if requested (clean conversation context)
+    if reset:
+        state = load_state()
+        if "conversations" in state and phone in state["conversations"]:
+            del state["conversations"][phone]
+        if "_meta" in state and phone in state["_meta"]:
+            del state["_meta"][phone]
+        save_state(state)
+
+    # Build message_data shape matching what /webhook receives
+    message_data = {
+        "from": phone,
+        "from_name": body.get("name", phone),
+        "type": msg_type,
+        "id": body.get("id", f"debug-{int(time.time()*1000)}"),
+    }
+    if msg_type == "text":
+        message_data["text"] = {"body": text}
+    elif msg_type == "image":
+        message_data["image"] = {
+            "id": body.get("media_id", ""),
+            "mime_type": body.get("mime_type", "image/jpeg"),
+        }
+
+    # Enter test mode: capture wa_send instead of calling WhatsApp
+    _TEST_STATE.capture = []
+    try:
+        # Patch the 10-second sleep at start of orchestrate (only if sleep_first=False)
+        # by monkey-patching time.sleep just for this call
+        if not sleep_first:
+            real_sleep = time.sleep
+            time.sleep = lambda *a, **k: None
+            try:
+                orchestrate(message_data)
+            finally:
+                time.sleep = real_sleep
+        else:
+            orchestrate(message_data)
+        captured = list(_TEST_STATE.capture)
+    finally:
+        _TEST_STATE.capture = None
+
+    return {
+        "phone": phone,
+        "input": text,
+        "replies": captured,
+        "n_replies": len(captured),
+    }
+
+
+# Bulk variant: run a list of queries, optionally each with reset_state
+@app.post("/debug/chat/bulk")
+async def debug_chat_bulk(request: Request):
+    debug_token = os.environ.get("DEBUG_TOKEN")
+    if not debug_token:
+        return Response(status_code=503, content="DEBUG_TOKEN not configured on server")
+    if request.headers.get("x-debug-token") != debug_token:
+        return Response(status_code=401, content="bad token")
+
+    body = await request.json()
+    queries = body.get("queries", [])
+    if not isinstance(queries, list):
+        return Response(status_code=400, content="queries must be a list")
+
+    results = []
+    real_sleep = time.sleep
+    time.sleep = lambda *a, **k: None
+    try:
+        for q in queries:
+            phone = q.get("phone", f"test-bulk-{q.get('id', 'auto')}")
+            text  = q.get("text", "")
+            reset = bool(q.get("reset_state", True))  # default reset=True for bulk
+            if reset:
+                state = load_state()
+                if "conversations" in state and phone in state["conversations"]:
+                    del state["conversations"][phone]
+                if "_meta" in state and phone in state["_meta"]:
+                    del state["_meta"][phone]
+                save_state(state)
+
+            message_data = {
+                "from": phone, "from_name": q.get("name", phone),
+                "type": "text", "text": {"body": text},
+                "id": f"bulk-{q.get('id','x')}-{int(time.time()*1000)}",
+            }
+            _TEST_STATE.capture = []
+            try:
+                orchestrate(message_data)
+                captured = list(_TEST_STATE.capture)
+            except Exception as exc:
+                captured = [{"to": phone, "text": f"[ERROR] {exc}"}]
+            finally:
+                _TEST_STATE.capture = None
+            results.append({"id": q.get("id"), "phone": phone, "input": text,
+                            "replies": captured})
+    finally:
+        time.sleep = real_sleep
+
+    return {"n_queries": len(queries), "results": results}
+
 
 @app.get("/privacy")
 async def privacy():
