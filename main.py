@@ -1419,6 +1419,28 @@ _MANOMETRO_HAS_SPECS_RE = re.compile(
 )
 
 
+# v27: accent stripping helper used by both _normalize_query_for_search and
+# _prefilter_catalog. Customers write "panorámica" but Zoho indexes
+# "PANORAMICA" — lowercased substring search misses without this.
+import unicodedata as _unicodedata_v27
+
+def _strip_accents(text: str) -> str:
+    if not text:
+        return text
+    nfd = _unicodedata_v27.normalize("NFD", text)
+    return "".join(ch for ch in nfd if _unicodedata_v27.category(ch) != "Mn")
+
+
+# v27: weight-token extractor for the prefilter's hard-constraint scoring.
+_WEIGHT_RE_V27 = re.compile(r"\b(\d+)\s*(?:lbs?|libras?|kg|kilos?)\b", re.IGNORECASE)
+
+
+def _extract_weights(text: str) -> set[str]:
+    if not text:
+        return set()
+    return {m.group(1) for m in _WEIGHT_RE_V27.finditer(text)}
+
+
 def _normalize_query_for_search(text: str) -> str:
     """Apply synonym expansion + mm→fraction + typo fixes before catalog search.
 
@@ -1432,6 +1454,12 @@ def _normalize_query_for_search(text: str) -> str:
     if not text:
         return text
     out = text
+
+    # v27 Bug B fix: strip Spanish accents FIRST so "panorámica" matches
+    # "PANORAMICA" in catalog. Customers on phone keyboards write accents,
+    # but the Zoho catalog is mostly unaccented. Bring both sides to the
+    # same form so the prefilter's substring search works.
+    out = _strip_accents(out)
 
     # 0) v25: weight canonicalization. Customers/orders write the rollo weight
     #    in many shapes: "33LB", "33lbs", "33 libras", "X 33LB". The Zoho
@@ -1553,12 +1581,21 @@ def _prefilter_catalog(query: str, catalog: list, top_n: int = 200) -> list:
     tokens = _query_tokens(query)
     if not tokens or not catalog:
         return catalog[:top_n]
+    # v27 Bug A: extract weights from the raw query for hard-constraint scoring.
+    # When a customer says "11 lbs", the 11-LBS variant must win even if a
+    # 33-LBS variant has more matching keywords (e.g. 'COBRIZADO' from synonym
+    # expansion that happens to be in the 33-lb name but not the 11-lb name).
+    query_weights = _extract_weights(query)
     scored: list[tuple[int, int, float, dict]] = []
     for item in catalog:
-        name      = (item.get("item_name") or "").lower()
-        sku       = (item.get("sku") or "").lower()
-        descr     = (item.get("description") or "").lower()
-        pdescr    = (item.get("purchase_description") or "").lower()
+        raw_name = item.get("item_name") or ""
+        # v27 Bug B: strip accents on the catalog side too. We compare
+        # accent-stripped lowercase substrings so customer 'panorámica'
+        # matches Zoho 'PANORAMICA'.
+        name      = _strip_accents(raw_name).lower()
+        sku       = _strip_accents(item.get("sku") or "").lower()
+        descr     = _strip_accents(item.get("description") or "").lower()
+        pdescr    = _strip_accents(item.get("purchase_description") or "").lower()
         score = 0
         for t in tokens:
             if t in name:
@@ -1573,6 +1610,20 @@ def _prefilter_catalog(query: str, catalog: list, top_n: int = 200) -> list:
                 score += 1
             if pdescr and t in pdescr:
                 score += 2  # boost — part-numbers are usually in purchase_description
+
+        # v27 Bug A: weight bonus/penalty. If query has a weight token (N lbs,
+        # N kg), give a strong +6 bonus when candidate matches AND a strong -4
+        # penalty when candidate has a different weight. This is essentially a
+        # "hard constraint" without breaking the existing scoring for queries
+        # that don't mention weight at all.
+        if query_weights:
+            cand_weights = _extract_weights(raw_name)
+            if cand_weights:
+                if query_weights & cand_weights:
+                    score += 6
+                elif cand_weights - query_weights:
+                    score -= 4
+
         if score > 0:
             brand_boost = 1 if _is_aa_brand(item) else 0
             stock = float(item.get("stock_on_hand") or 0)
