@@ -2809,7 +2809,15 @@ def zoho_search_item_for_quote(product_name: str,
             if preferred:
                 items = preferred
         if items:
-            i = items[0]
+            # v26 FIX bug 33LBS rollo: ANTES tomaba items[0] sin re-ranking → si
+            # Zoho devolvía un 11-LBS variant primero, ganaba aunque el cliente
+            # pidió 33 LBS. Re-aplicar _prefilter_catalog para que los tokens de
+            # peso/diámetro ganen sobre el orden arbitrario de Zoho.
+            try:
+                ranked = _prefilter_catalog(product_name, items, top_n=5)
+                i = ranked[0] if ranked else items[0]
+            except Exception:
+                i = items[0]
             return {"item_id": i.get("item_id", ""), "name": i.get("item_name", ""),
                     "rate": i.get("rate", 0.0), "unit": i.get("unit", "")}
     except Exception as e:
@@ -2846,7 +2854,15 @@ def _significant_tokens(s: str) -> set[str]:
 
 
 def _match_score(query_tokens: set[str], candidate: str) -> float:
-    """Score a candidate name 0.0–1.0 by significant-token overlap."""
+    """Score a candidate name 0.0–1.0 by token overlap + sequence ratio.
+
+    v26 FIX bug duplicate "hidalgo e hidalgo": antes era 100% coverage
+    (overlap/query_tokens) lo cual es asimétrico. Si query='hidalgo' (1 tok) y
+    candidato='HIDALGO E HIDALGO HONDURAS S.A.' → score=1.0, PERO cualquier otro
+    contacto con 'hidalgo' (ej. JUAN HIDALGO) también daba 1.0 → empate → gap=0
+    → no confident → bot creaba duplicado. Ahora mezcla coverage + Jaccard +
+    SequenceMatcher para penalizar nombres totalmente distintos y dar gaps reales.
+    """
     if not query_tokens:
         return 0.0
     cand_tokens = _significant_tokens(candidate)
@@ -2855,8 +2871,25 @@ def _match_score(query_tokens: set[str], candidate: str) -> float:
     overlap = query_tokens & cand_tokens
     if not overlap:
         return 0.0
-    # Score: fraction of query tokens that appear in candidate
-    return len(overlap) / len(query_tokens)
+    coverage = len(overlap) / len(query_tokens)
+    jaccard = len(overlap) / len(query_tokens | cand_tokens)
+    try:
+        from difflib import SequenceMatcher
+        seq = SequenceMatcher(
+            None,
+            _normalize_for_match(" ".join(sorted(query_tokens))),
+            _normalize_for_match(candidate),
+        ).ratio()
+    except Exception:
+        seq = 0.0
+    # Weighted blend · coverage dominates (matches must contain all query tokens),
+    # jaccard breaks ties (penalizes candidates con extras), seq tames false-positives.
+    score = 0.5 * coverage + 0.3 * jaccard + 0.2 * seq
+    # Substring bonus: si el candidato contiene el query como substring contiguo,
+    # boost de 0.15 (ej. "hidalgo e hidalgo" en "HIDALGO E HIDALGO HONDURAS").
+    if _normalize_for_match(" ".join(sorted(query_tokens))) in _normalize_for_match(candidate):
+        score = min(1.0, score + 0.15)
+    return score
 
 
 def _authorize_pricebook(from_phone: str, customer_name: str) -> tuple[str, bool, str]:
