@@ -255,6 +255,30 @@ PRECEDENCIA sobre cualquier otra regla de estilo en el resto del prompt.
   "¿es para trabajo pesado?", "¿qué tipo?", "¿cuál es su uso?" salvo que
   el cliente esté indeciso explícitamente.
 
+▸ TOMÁ TU TIEMPO PARA PENSAR antes de responder. El sistema te da extended
+  thinking — usalo. Antes de generar la respuesta, internamente preguntate:
+  1. ¿Es esto una pregunta nueva, una respuesta a una pregunta mía anterior,
+     o una CORRECCIÓN de algo que dije/asumí?
+  2. Si menciona algo que parece nombre/empresa: ¿es un nombre real o es
+     una corrección de producto que estoy malinterpretando?
+  3. ¿La frase "son boquillas de 1/8" significa "el cliente se llama así" o
+     "el cliente está corrigiéndome el producto"? OBVIAMENTE es lo segundo —
+     pero el bot v26 a veces lo confundía y guardaba "boquillas de 1/8" como
+     nombre. NUNCA lo hagas.
+  4. ¿La descripción del producto en mi última oferta cabe con lo que el
+     cliente está diciendo? Si el cliente repite con más detalle, probablemente
+     me equivoqué — ajustá la cotización.
+
+▸ CORRECCIONES DEL CLIENTE (críticas — el bot v26 las ignoraba):
+  Si el cliente escribe algo como:
+    • "no, era de 1/8 no 3/32"
+    • "son boquillas de tal cosa"
+    • "el 6011 eran 50 lbs no 10"
+    • "yo dije 7018, no 6011"
+  Eso es UNA CORRECCIÓN, no info nueva. Ajustá la cotización anterior, no
+  agregues productos como nuevos. NUNCA tomes el contenido de la corrección
+  como nombre del cliente, dirección, ni nada estructural.
+
 ▸ ANTI-PATRONES (lo que el bot v26 hacía y NO debe hacer):
 
   ✗ "Hola buen día! Para orientarle mejor, ¿qué producto está buscando?"
@@ -1271,14 +1295,43 @@ def bot_asked_city(response: str) -> bool:
     return (has_both and has_question) or asks_location
 
 def claude_respond(system: str, conversation_history: list, new_message: str) -> str:
+    """v28.2 — main sales agent reply with EXTENDED THINKING.
+
+    Daniel: 'el bot toma decisiones muy rápidas, ocupa más tiempo para pensarlo'.
+    Solución: extended thinking de Sonnet 4.6 — el modelo reflexiona internamente
+    antes de generar la respuesta visible al cliente. Esto:
+      - Detecta correcciones del cliente que el modelo veloz ignoraba
+      - Distingue mejor entre nombre-de-cliente vs descripción-de-producto
+      - Permite que el modelo planee la respuesta antes de "soltarla"
+
+    Thinking budget = 4000 tokens (~10s extra). max_tokens debe ser
+    >= budget_tokens + 1024 (Anthropic API requirement).
+    """
     messages = conversation_history[-10:] + [{"role": "user", "content": new_message}]
-    msg = claude.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=400,
-        system=system,
-        messages=messages
-    )
-    return msg.content[0].text
+    try:
+        msg = claude.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=5500,            # 4000 thinking + ~1500 output
+            thinking={"type": "enabled", "budget_tokens": 4000},
+            system=system,
+            messages=messages,
+        )
+    except Exception as e:
+        # If extended thinking not supported / API error, fall back to non-thinking
+        log_action("Claude", "thinking_fallback", str(e)[:200])
+        msg = claude.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=600,
+            system=system,
+            messages=messages,
+        )
+    # Find the first text block — when thinking is enabled, the response has
+    # both ThinkingBlock and TextBlock; we want only the visible text.
+    for block in msg.content:
+        if getattr(block, "type", None) == "text":
+            return block.text
+    # Fallback: stringify first block
+    return getattr(msg.content[0], "text", "") if msg.content else ""
 
 def get_conv_meta(state: dict, conv_key: str) -> dict:
     if 'conv_meta' not in state:
@@ -2842,6 +2895,32 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
         "- Si el cliente dijo 'de 10' o 'quiero 10', es la cantidad del producto mencionado en el MISMO o el ANTERIOR mensaje. NO arrastres productos de hace varias cotizaciones.\n"
         "- IGNORA productos que aparecen sólo en el contexto si fueron parte de una cotización anterior ya cerrada (no se confunden con la actual). El historial te sirve para entender el FLUJO, no para acumular productos.\n"
         "\n"
+        "⚠️ REGLA CRÍTICA — customer_name SOLO si es claramente un NOMBRE DE EMPRESA O PERSONA:\n"
+        "El campo `customer_name` SOLO se llena cuando el cliente explícitamente diga:\n"
+        "  • 'a nombre de [X]'\n"
+        "  • 'facturar a [X]'\n"
+        "  • 'para la empresa [X]'\n"
+        "  • 'mi empresa es [X]'\n"
+        "  • 'soy de [X]'\n"
+        "  • 'represento a [X]'\n"
+        "  • presenta RTN/cedula con un nombre\n"
+        "\n"
+        "NUNCA confundas correcciones de productos con nombres de cliente. Si el\n"
+        "cliente dice cosas como 'son boquillas de 1/8', 'no, eran de 0.035',\n"
+        "'eran electrodos de 7018', 'no es 11, es 33 lbs', ESO ES UNA CORRECCIÓN\n"
+        "DE PRODUCTO — el customer_name debe quedar VACÍO (\"\").\n"
+        "\n"
+        "Reglas de validez para customer_name:\n"
+        "  ✗ Si contiene números (excepto en nombres de empresa típicos como 'Proenco 2', 'AC 7000')\n"
+        "  ✗ Si contiene términos técnicos: boquilla, electrodo, alambre, careta, guante,\n"
+        "    chaqueta, mig, tig, lbs, libra, libras, mm, pulgada, rollo, caja\n"
+        "  ✗ Si contiene fracciones: 1/8, 1/4, 3/32, 0.035, etc.\n"
+        "  ✗ Si empieza con preposición ('de', 'para', 'con', 'sin', 'en')\n"
+        "  ✗ Si es muy corto (1-2 caracteres)\n"
+        "  ✗ Si empieza con 'no' / 'si' (correcciones)\n"
+        "  ✗ Si es la palabra 'cliente' o 'persona' (genéricos)\n"
+        "Si en duda, DEJÁ customer_name VACÍO. Es mejor pedirle el nombre que poner uno falso.\n"
+        "\n"
         "⚠️ PESO DEL ROLLO/SPOOL — REGLA CRÍTICA (bug v24-v25):\n"
         "Cuando el cliente describe la PRESENTACIÓN/EMPAQUE de un rollo, ese\n"
         "peso es PARTE DEL PRODUCTO, no la cantidad. Ejemplos:\n"
@@ -2896,10 +2975,68 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
                     )):
                         it["unit"] = "LB"
             customer_name = parsed.get("customer_name", "")
+            # v28.2 — defense in depth: validate customer_name programmatically
+            # in case Haiku ignores the prompt rule. Reject anything that looks
+            # like a product description, correction, or technical spec.
+            customer_name = _sanitize_customer_name(customer_name)
             return items, customer_name
     except Exception as e:
         log_action("QuoteAgent", "extract_error", str(e))
     return [], ""
+
+
+# v28.2: lookalike-token blocker to prevent product specs being saved as
+# customer names. Real bug: client said "son boquillas de 1/8" as a correction
+# and the LLM extracted "boquillas de 1/8" as customer_name, then created a
+# Zoho contact with that garbage name.
+_NAME_FORBIDDEN_TOKENS = {
+    "boquilla", "boquillas", "electrodo", "electrodos", "alambre", "alambres",
+    "careta", "caretas", "guante", "guantes", "chaqueta", "chaquetas",
+    "mig", "tig", "smaw", "gmaw", "lbs", "libra", "libras", "lb",
+    "kg", "kilo", "kilos", "rollo", "rollos", "caja", "cajas",
+    "mm", "pulgada", "pulgadas", "und", "unidad", "unidades",
+    "tobera", "toberas", "difusor", "tip", "tips",
+    "regulador", "reguladores", "manometro", "manómetro",
+    "antorcha", "antorchas", "kit", "set",
+    "6010", "6011", "6013", "7014", "7018", "7024", "8018", "9018",
+    "0.035", "0.030", "0.045", "1/8", "1/4", "3/32", "5/32", "3/16",
+    "no", "si", "no,", "si,", "claro", "ok", "vale",
+    "cliente", "persona",
+}
+_FRACTION_RE_V28 = re.compile(r"\b\d+/\d+\b|\b0\.\d+\b")
+
+
+def _sanitize_customer_name(name: str) -> str:
+    """Returns name unchanged if it looks like a real customer/company name;
+    otherwise returns empty string. Conservative — better to ask for the name
+    again than to save garbage in Zoho contacts.
+    """
+    if not name or not name.strip():
+        return ""
+    n = name.strip()
+    if len(n) < 3:
+        log_action("QuoteAgent", "name_rejected_too_short", n)
+        return ""
+    # Reject if any forbidden token appears as a word in the name
+    low_words = re.findall(r"\b\S+\b", n.lower())
+    for tok in low_words:
+        if tok in _NAME_FORBIDDEN_TOKENS:
+            log_action("QuoteAgent", "name_rejected_product_token", f"'{n}' had '{tok}'")
+            return ""
+    # Reject if it contains a fraction or decimal (technical spec)
+    if _FRACTION_RE_V28.search(n):
+        log_action("QuoteAgent", "name_rejected_spec", n)
+        return ""
+    # Reject names that start with prepositions (likely a fragment, not a name)
+    if low_words and low_words[0] in {"de", "del", "para", "con", "sin", "en", "por", "a"}:
+        log_action("QuoteAgent", "name_rejected_preposition_start", n)
+        return ""
+    # Reject if it's mostly digits
+    digit_chars = sum(1 for c in n if c.isdigit())
+    if digit_chars > len(n) * 0.4:
+        log_action("QuoteAgent", "name_rejected_mostly_digits", n)
+        return ""
+    return n
 
 
 def zoho_search_item_for_quote(product_name: str,
