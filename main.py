@@ -269,6 +269,22 @@ PRECEDENCIA sobre cualquier otra regla de estilo en el resto del prompt.
      cliente está diciendo? Si el cliente repite con más detalle, probablemente
      me equivoqué — ajustá la cotización.
 
+▸ COTIZACIÓN PDF — SÉ PROACTIVO (v28.3):
+  Cuando el cliente menciona cantidad + producto específico (ej: "100 lbs de
+  7018 1/8", "necesito 3 caretas Pro 4.0"), o cuando confirma compra ("lo
+  llevo", "me lo paso a recoger", "okay confirmo"), generá la cotización
+  PDF formal — NO te quedes en texto. Daniel observó que el bot v28 solo
+  mandaba PDF cuando el cliente decía explícitamente "cotización formal".
+  Ahora también disparalo en:
+    • Compra confirmada (1 producto + cantidad clara)
+    • Cliente pide "factura", "PDF", "documento"
+    • Multi-item con cantidades
+
+  El quote_agent maneja el flujo de generar el PDF de Zoho automáticamente —
+  vos solo asegurate de que el camino llegue a quote_agent (mencionando
+  algún trigger del módulo, o respondiendo "le preparo cotización formal"
+  cuando el cliente confirme).
+
 ▸ CORRECCIONES DEL CLIENTE (críticas — el bot v26 las ignoraba):
   Si el cliente escribe algo como:
     • "no, era de 1/8 no 3/32"
@@ -465,14 +481,49 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
 4. MICROALAMBRE / ALAMBRE MIG:
    Preguntar: ¿con gas o sin gas? ¿qué diámetro? ¿marca actual?
    TIPOS DISPONIBLES (marca American Alloy y Washington Alloy):
-   PRECIOS MICROALAMBRES (con ISV incluido):
-   - ER70S-6 cobrizado 0.035" rollo 33 lbs: L32.06/lb (rollo completo ~L1,058)
-   - E71T-GS flux core sin gas 0.030" de 2 lbs A.A.: L342.85 | de 11 lbs: L977.50
-   - 600HT flux core 0.045" 33 lbs: L293.25/lb
+
+   ⚠️ REGLA CRÍTICA — CUANDO CLIENTE PREGUNTA POR "CALIBRES" / "TODOS" / "QUE
+   DIÁMETROS TIENEN" (v28.3 — bug real reportado por Daniel):
+   Si el cliente pregunta en PLURAL o GENERAL como "tienen de 2 lbs de TODOS
+   los calibres microalambre fluxcore" → DEBES listar TODOS los diámetros que
+   manejás en esa presentación, NO solo uno. Daniel reportó que el bot decía
+   "manejamos solo 0.035 en 2 lbs" cuando en realidad maneja 0.030, 0.035 Y
+   0.045 en 2 lbs. Eso es pérdida de venta.
+
+   ━━━ TABLA EXPLÍCITA DE DIÁMETROS POR PRESENTACIÓN — FLUX CORE E71T-GS ━━━
+   Presentación 2 lbs (carrete chico — A.A.):
+     • 0.030" → L342.85 (E71T-GS 2 lbs A.A.)
+     • 0.035" → L342.85 (E71T-GS 2 lbs A.A.)
+     • 0.045" → L342.85 (E71T-GS 2 lbs A.A.)
+   Presentación 11 lbs (rollo grande — A.A.):
+     • 0.030" → L977.50
+     • 0.035" → L977.50
+     • 0.045" → L977.50
+   600HT flux core (autoprotegido, hardfacing):
+     • 0.045" rollo 33 lbs → L293.25/lb
+
+   ━━━ TABLA DIÁMETROS — ER70S-6 COBRIZADO (CON GAS) ━━━
+   Rollo 33 lbs A.A.:
+     • 0.030" → L32.06/lb (~L1,058 rollo)
+     • 0.035" → L32.06/lb (~L1,058 rollo)
+     • 0.045" → L32.06/lb (~L1,058 rollo)
+   Rollo 11 lbs:
+     • 0.030" / 0.035" / 0.045" — consultar precio en tienda
+
+   ━━━ ESPECIALES ━━━
+   - 309L Gasless inox 0.035" rollo 2 lbs: L1,216.70
    - Aluminio 4043 0.035" 1 lb: L391.00 | 4043 de 3/64" rollo 15 lbs: L402.50/lb
    - Aluminio 5356 0.035" 1 lb: L615.25
-   - 309 Gasless inox 0.035" 2 lbs: L1,216.70
-   Da estos precios directamente cuando el cliente pregunte. Si el cliente tiene el producto actual: pedirle foto para identificar la referencia correcta.
+
+   PATRÓN DE RESPUESTA cuando cliente pregunta general/plural:
+     Cliente: "tienen de 2 libras de todos los calibres microalambre fluxcore?"
+     ✓ Bot: "Si, en flux core E71T-GS 2 lbs A.A. manejamos 0.030, 0.035 y 0.045 —
+             todos a L342.85 con ISV. ¿Cuál calibre necesitás?"
+     ✗ Bot (v26-v28.2 antes de este fix): "El flux core que manejamos es el
+             E71T-GS de 0.035 en 2 lbs a L342.85, solo manejamos ese diámetro
+             en esa presentación." ← OMITE 0.030 y 0.045, pierde venta.
+
+   Si el cliente tiene el producto actual: pedirle foto para identificar la referencia correcta.
 
 5. VARILLAS (soldadura autógena y TIG):
    Disponibles: aluminio (liso y con fundente), acero inoxidable, bronce (lisa y revestida), hierro.
@@ -840,41 +891,141 @@ SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante'
 # no maneja esos productos. Si el cliente pregunta por ellos, el bot debe
 # decir explícitamente que SUMIN no los maneja y sugerir una ferretería.
 
-# ─── PRODUCT IMAGES ──────────────────────────────────────────────────────────
+# ─── PRODUCT IMAGES (v28.3 — expandido a 24 categorías) ──────────────────────
+# Generado por scan del repo (DanielPrado00/sumin-wa-bot/images/*). Cada
+# categoría tiene hasta 4 fotos, priorizando nombres descriptivos (Pro40_*,
+# Delantal_AA_*) sobre IDs numéricos genéricos (770Axxxx, P136xxxx). Daniel
+# reportó (jun-2026) que el bot no estaba mandando fotos cuando el cliente las
+# pedía — la causa era que PRODUCT_IMAGES solo tenía 7 categorías cableadas
+# de las 24 disponibles en el repo. Esta versión cubre todas.
 PRODUCT_IMAGES: dict[str, list[str]] = {
+    "almohadilla": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/almohadilla/770A0408.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/almohadilla/770A0409.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/almohadilla/770A9886.jpg",
+    ],
+    "antorcha_miller": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_miler/770A9718.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_miler/770A9724.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_miler/770A9730.jpg",
+    ],
+    "antorcha_wp26": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_wp26/770A9328.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_wp26/770A9331.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_wp26/770A9333.jpg",
+    ],
+    "antorchas_mfa": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorchas_mfa/770A9514.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorchas_mfa/770A9586.jpg",
+    ],
+    "bolso_electrodos": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/bolso_electrodos/770A0369.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/bolso_electrodos/770A0384.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/bolso_electrodos/770A9842.jpg",
+    ],
+    "boquillas": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/boquillas/770A9449.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/boquillas/770A9450.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/boquillas/770A9454.jpg",
+    ],
     "caretas": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pano56_DeLado.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pano56_Frontal.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pro40_Frontal.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pro40_Lateral.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pano56_Frontal.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pano56_DeLado.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/770A9938_2.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/770A9943_2.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/770A9949.jpg",
+    ],
+    "chaqueta": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/chaqueta/Chaqueta_AA.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/chaqueta/P1362915.jpg",
+    ],
+    "chisperos": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/chisperos/770A9304.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/chisperos/770A9308.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/chisperos/770A9310.jpg",
+    ],
+    "conectores": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/conectores/770A9312.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/conectores/770A9315.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/conectores/770A9316.jpg",
+    ],
+    "delantal": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/delantal/Delantal_AA_Frontal.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/delantal/Delantal_AA_Lateral.jpg",
+    ],
+    "gafas": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/gafas/770A0195.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/gafas/770A0199.jpg",
+    ],
+    "gorros": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/gorros/P1362862.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/gorros/P1362864.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/gorros/P1362870.jpg",
     ],
     "guantes": [
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/HeatProtection14_Lateral.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/HeatProtection14_Palma.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/HeatProtection18_Lateral.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/HeatProtection18_Palma.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/Weldas14_Negro.jpg",
     ],
-    "chaqueta": [
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/chaqueta/Chaqueta_AA.jpg",
+    "mangas": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/mangas/P1362833.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/mangas/P1362844.jpg",
     ],
-    "delantal": [
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/delantal/Delantal_AA_Frontal.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/delantal/Delantal_AA_Lateral.jpg",
+    "manguera_argon": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/manguera_argon/770A9710.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/manguera_argon/770A9713.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/manguera_argon/770A9822.jpg",
+    ],
+    "manta_soldadura": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/manta_soldadura/770A0340.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/manta_soldadura/770A0342.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/manta_soldadura/770A0345.jpg",
+    ],
+    "polo_tierra": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/polo_tierra/tenaza.jpg",
+    ],
+    "porta_electrodos": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/porta_electrodos/770A9675.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/porta_electrodos/770A9698.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/porta_electrodos/770A9914.jpg",
     ],
     "reguladores": [
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Reguladores_SafeCut450.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/reguladores/770A9630.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/reguladores/770A9637.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/reguladores/770A9865.jpg",
     ],
+    "respiradores": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/respiradores/P1362769.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/respiradores/P1362779.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/respiradores/P1362787.jpg",
+    ],
+    "tiza": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/tiza/770A9589.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/tiza/770A9590.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/tiza/770A9615.jpg",
+    ],
+    "toberas_mig": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/toberas_mig/770A9396.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/toberas_mig/770A9410.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/toberas_mig/770A9413.jpg",
+    ],
+    "oxicorte": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Antorcha_SafeCut_CA460_WH450FC.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Reguladores_SafeCut450.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/SafeCut450_Completo1.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/SafeCut450_Completo2.jpg",
+    ],
+    # Aliases para retro-compatibilidad con el código viejo del bot:
     "antorchas": [
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Antorcha_SafeCut_CA460_WH450FC.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_miler/770A9718.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_wp26/770A9328.jpg",
     ],
     "equipo_oxicorte": [
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/SafeCut450_Completo1.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/SafeCut450_Completo2.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/SafeCut450_Interior.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Antorcha_SafeCut_CA460_WH450FC.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Reguladores_SafeCut450.jpg",
     ],
 }
 
@@ -2793,6 +2944,19 @@ QUOTE_TRIGGERS = [
     "me cotice", "me cotíce",
     # Forma corta "una coti" / "la coti":
     "una coti", "la coti",
+    # v28.3 — Daniel reportó que el bot a veces solo manda texto cuando debería
+    # mandar PDF. Estos triggers cubren "intent de compra" más amplio para
+    # que se dispare el quote_agent (genera PDF automáticamente):
+    "lo llevo", "me lo llevo", "lo quiero", "me lo paso a recoger",
+    "lo paso a recoger", "vendido", "perfecto me sirve",
+    "okay lo confirmo", "ok lo confirmo", "confirmo el pedido",
+    "envíeme la cuenta", "envieme la cuenta", "envíame la cuenta",
+    "envíame el detalle", "pásame el detalle",
+    "me lo factura", "me lo facturan", "factura por favor",
+    "factúrame", "facturame",
+    "armame la cotización", "armame la coti",
+    "pdf", "envíame pdf", "mandame pdf", "envíeme pdf",
+    "documento", "comprobante de cotización",
 ]
 
 # Regex para detectar patrones cantidad + unidad + producto típicos de SUMIN.
@@ -3107,8 +3271,16 @@ _NORMALIZE_RE = re.compile(r"[^\w\s]+", re.UNICODE)
 
 
 def _normalize_for_match(s: str) -> str:
-    """Normalize a name for token-based comparison."""
-    s = (s or "").lower()
+    """Normalize a name for token-based comparison.
+
+    v28.3 BUG FIX (jun-2026, Daniel reportó caso real):
+    Cliente mandó nombre "Asociación Aloysius" (con acento). En Zoho ya existe
+    "Asociacion Aloysius" (sin acento). Antes _normalize_for_match no removía
+    acentos → 'asociacion' nunca matcheaba 'asociación' → score=0 → bot creó
+    un NUEVO contacto duplicado. Ahora aplicamos _strip_accents primero para
+    que ambas formas converjan a la misma representación.
+    """
+    s = _strip_accents((s or "").lower())
     s = _NORMALIZE_RE.sub(" ", s)
     return " ".join(s.split())
 
