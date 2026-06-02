@@ -3054,6 +3054,65 @@ def detect_quote_request(text: str) -> bool:
     return False
 
 
+# v29.2 — patrones de "el bot está esperando una respuesta a una pregunta de
+# seguimiento". Si el último mensaje del bot pregunta "¿Cuántas unidades?" /
+# "¿Desde qué parte?" / "¿Qué diámetro?", la respuesta corta del cliente NO
+# debe disparar una nueva cotización.
+_BOT_FOLLOWUP_QUESTION_PATTERNS = (
+    # Cantidad
+    "cuántas unidades", "cuantas unidades", "cuántas necesita", "cuantas necesita",
+    "cuántos rollos", "cuantos rollos", "cuántas cajas", "cuantas cajas",
+    "cuántas libras", "cuantas libras", "cuántos kilos", "cuantos kilos",
+    "cuánto necesita", "cuanto necesita", "cuántos quiere", "cuantos quiere",
+    "cantidad necesita", "qué cantidad",
+    # Logística / ciudad
+    "desde qué parte", "desde que parte", "qué parte del país", "que parte del pais",
+    "está en san pedro", "esta en san pedro", "pasa por nuestra tienda",
+    "san pedro o tegucigalpa", "donde nos escribe", "dónde nos escribe",
+    # Specs
+    "qué diámetro", "que diametro", "qué calibre", "que calibre",
+    "qué presentación", "que presentacion", "con gas o sin gas",
+    "qué tipo", "que tipo", "qué marca", "que marca", "qué color", "que color",
+    "qué grosor", "que grosor", "qué medida", "que medida",
+    "qué número", "que numero", "qué modelo", "que modelo",
+    "para qué uso", "para que uso",
+    # Confirmación de identidad / billing
+    "a nombre de quién", "a nombre de quien", "para qué empresa", "para que empresa",
+    "me brinda el rtn", "me confirma el rtn",
+)
+
+
+def _is_followup_to_bot_question(text: str, history: list) -> bool:
+    """v29.2 — True si el último turno del bot fue una pregunta de seguimiento
+    y el mensaje actual del cliente es una respuesta corta a esa pregunta.
+
+    Bug real (jun-2026, Erik Bonilla): bot pidió "¿Cuántas unidades necesita?",
+    cliente respondió "6 unidades", bot detectó cantidad+unidad → trigger nueva
+    cotización → pidió productos otra vez. Pérdida total del contexto.
+
+    Returns True si:
+      - el último mensaje del bot contiene una pregunta de seguimiento
+      - el texto del cliente es SHORT (≤6 palabras) — respuesta breve
+    """
+    if not text or not history:
+        return False
+    # Mensajes cortos solamente (>6 palabras probablemente es nueva consulta)
+    if len(text.split()) > 6:
+        return False
+    # Buscar último mensaje del bot
+    last_bot_msg = None
+    for m in reversed(history):
+        if m.get("role") == "assistant":
+            last_bot_msg = (m.get("content") or "").lower()
+            break
+    if not last_bot_msg:
+        return False
+    # ¿La pregunta del bot termina en "?" o tiene patrón de pregunta de seguimiento?
+    if not any(p in last_bot_msg for p in _BOT_FOLLOWUP_QUESTION_PATTERNS):
+        return False
+    return True
+
+
 def _explicit_new_quote_request(text: str) -> bool:
     """Stricter than `detect_quote_request` — TRUE only for explicit trigger
     phrases ("cotice", "cotización", "presupuesto", etc.), NOT for quantity+unit
@@ -4616,7 +4675,19 @@ def orchestrate(message_data: dict):
             quote_agent(from_number, from_name, text, state)
             return
 
-        if detect_quote_request(text):
+        # v29.2 BUG FIX (jun-2026): si el último mensaje del bot fue una
+        # pregunta de seguimiento (¿Cuántas unidades necesita? / ¿Desde qué
+        # parte del país? / ¿Qué diámetro? / etc.), la respuesta corta del
+        # cliente NO debe disparar una nueva cotización — es la respuesta a
+        # esa pregunta. Daniel reportó caso real Erik Bonilla: bot pidió
+        # cuántas unidades, cliente respondió "6 unidades", bot inició una
+        # nueva cotización pidiendo productos (perdió el contexto).
+        _history_for_context = state["conversations"].get(from_number, [])
+        if _is_followup_to_bot_question(text, _history_for_context):
+            log_action("Orchestrator", "skip_quote_followup", f"text='{text[:60]}'")
+            # Caer al claude_respond normal (sales_agent), que tiene el
+            # historial completo y puede responder en contexto.
+        elif detect_quote_request(text):
             quote_agent(from_number, from_name, text, state)
             return
 
