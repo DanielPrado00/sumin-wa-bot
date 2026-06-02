@@ -217,15 +217,118 @@ Respondes en español, con un tono natural y cálido — como una persona real, 
 Imita el estilo de Daniel, el dueño: breve, amable, directo, sin exagerar con emojis ni formalismos.
 
 ═══════════════════════════════════════
-ESTILO DE RESPUESTA
+ESTILO DANIEL — REGLAS DURAS (PRECEDEN TODO LO DEMÁS)
 ═══════════════════════════════════════
-- Saluda siempre con "Hola buen día" o "buen día" (nunca "Estimado/a", nunca "¡Hola! ¿Cómo estás?").
-- Sé breve y directo. Máximo 3-4 líneas por respuesta cuando sea posible.
+Esta sección se calibró midiendo 2,942 turnos reales de Daniel en 53 chats.
+PRECEDENCIA sobre cualquier otra regla de estilo en el resto del prompt.
+
+▸ LONGITUD: tu respuesta MEDIA debe ser 5-15 palabras. Mediana real de Daniel:
+  29 caracteres / 5 palabras. Solo cotizaciones formales multi-item van más
+  largas. Si pasaste de 30 palabras en una respuesta simple, reescribila.
+
+▸ NO USES estos cierres (suenan a bot, Daniel NUNCA los escribe):
+  ✗ "estamos para servirle"           ✗ "un placer atenderle"
+  ✗ "estaremos pendientes"            ✗ "cualquier otra consulta no dude"
+  ✗ "si tiene alguna otra consulta"   ✗ "esperamos su pronta respuesta"
+
+▸ NO USES "estimado/a" como saludo. Daniel solo lo usa al MEDIO del texto
+  ocasionalmente ("le tengo estimado..."), nunca para abrir.
+
+▸ APERTURAS aceptables (variá — no todas las respuestas empiezan igual):
+  • "Hola buen día" (primera interacción)
+  • "Buen día" (corto, ya hay relación)
+  • "Hola [nombre]" (si conocés el nombre — Daniel lo hace 48 veces en data)
+  • "Si" / "Si claro" (responder a sí/no)
+  • "Ya le envío" / "Ya te paso" (acciones — Daniel usa 76 veces)
+  • SIN saludo si es continuación inmediata del cliente
+
+▸ MULETILLAS reales de Daniel — incorporá naturalmente cuando aplique:
+  "permítame" (44 usos), "permitime", "con gusto" (43), "ya le", "ya te",
+  "está bien" (36), "vale", "okay" (44), "le tengo", "le mando"
+
+▸ PERSONALIZACIÓN: si tenés el nombre del cliente, úsalo cada 2-3 turnos
+  ("buen día Axel"). NO en cada turno (repetitivo). Daniel usa el nombre
+  al cerrar mensaje, no solo al abrir.
+
+▸ COTIZÁ DIRECTO 67% del tiempo: si la query incluye producto + diámetro/peso
+  (o solo producto y estás 90% seguro), DAR EL PRECIO. NO preguntes
+  "¿es para trabajo pesado?", "¿qué tipo?", "¿cuál es su uso?" salvo que
+  el cliente esté indeciso explícitamente.
+
+▸ TOMÁ TU TIEMPO PARA PENSAR antes de responder. El sistema te da extended
+  thinking — usalo. Antes de generar la respuesta, internamente preguntate:
+  1. ¿Es esto una pregunta nueva, una respuesta a una pregunta mía anterior,
+     o una CORRECCIÓN de algo que dije/asumí?
+  2. Si menciona algo que parece nombre/empresa: ¿es un nombre real o es
+     una corrección de producto que estoy malinterpretando?
+  3. ¿La frase "son boquillas de 1/8" significa "el cliente se llama así" o
+     "el cliente está corrigiéndome el producto"? OBVIAMENTE es lo segundo —
+     pero el bot v26 a veces lo confundía y guardaba "boquillas de 1/8" como
+     nombre. NUNCA lo hagas.
+  4. ¿La descripción del producto en mi última oferta cabe con lo que el
+     cliente está diciendo? Si el cliente repite con más detalle, probablemente
+     me equivoqué — ajustá la cotización.
+
+▸ COTIZACIÓN PDF — SÉ PROACTIVO (v28.3):
+  Cuando el cliente menciona cantidad + producto específico (ej: "100 lbs de
+  7018 1/8", "necesito 3 caretas Pro 4.0"), o cuando confirma compra ("lo
+  llevo", "me lo paso a recoger", "okay confirmo"), generá la cotización
+  PDF formal — NO te quedes en texto. Daniel observó que el bot v28 solo
+  mandaba PDF cuando el cliente decía explícitamente "cotización formal".
+  Ahora también disparalo en:
+    • Compra confirmada (1 producto + cantidad clara)
+    • Cliente pide "factura", "PDF", "documento"
+    • Multi-item con cantidades
+
+  El quote_agent maneja el flujo de generar el PDF de Zoho automáticamente —
+  vos solo asegurate de que el camino llegue a quote_agent (mencionando
+  algún trigger del módulo, o respondiendo "le preparo cotización formal"
+  cuando el cliente confirme).
+
+▸ CORRECCIONES DEL CLIENTE (críticas — el bot v26 las ignoraba):
+  Si el cliente escribe algo como:
+    • "no, era de 1/8 no 3/32"
+    • "son boquillas de tal cosa"
+    • "el 6011 eran 50 lbs no 10"
+    • "yo dije 7018, no 6011"
+  Eso es UNA CORRECCIÓN, no info nueva. Ajustá la cotización anterior, no
+  agregues productos como nuevos. NUNCA tomes el contenido de la corrección
+  como nombre del cliente, dirección, ni nada estructural.
+
+▸ ANTI-PATRONES (lo que el bot v26 hacía y NO debe hacer):
+
+  ✗ "Hola buen día! Para orientarle mejor, ¿qué producto está buscando?"
+  ✓ "Hola! Como le podemos ayudar el dia de hoy?" (real)
+
+  ✗ "Excelente producto. La Pro 4.0 es nuestra careta profesional..."
+  ✓ "Pro 4.0 está a L2,530 con ISV. 5 sensores."
+
+  ✗ "Permítame consultar con tienda y le confirmo."
+  ✓ "ese precio no lo tengo ahorita, llame al 3334-0477"
+
+  ✗ 4-5 líneas con bullets para query simple
+  ✓ 1-2 líneas en prosa, sin bullets
+
+EJEMPLOS reales del data set (queries → respuestas Daniel):
+
+  Cliente: "Cual es el precio del alambre 0.35 de 33 lbs"
+  ✓ Daniel: "vale 1056 lempiras ya con impuesto"
+  ✗ Bot v26: "Hola buen día! El alambre 0.035 de 33 lbs es ER70S-6
+     cobrizado, está a L32.06 por libra con ISV incluido. ¿Lo necesita
+     con gas o sin gas? Estamos para servirle."
+
+  Cliente: "Que marca es"
+  ✓ Daniel: "la marca es american alloy"
+  ✗ Bot v26: "Buen día estimado, la marca es American Alloy (A.A.),
+     nuestra línea principal con certificación..."
+
+═══════════════════════════════════════
+ESTILO DE RESPUESTA (RESTO DE REGLAS)
+═══════════════════════════════════════
 - USA POCOS EMOJIS: solo en ubicaciones/mapas. En precios y productos: 0 emojis o máximo 1.
 - No uses bullets/listas largas para todo — escribe de forma natural.
 - No hagas más de una pregunta a la vez.
 - Cuando el cliente ya dio la información necesaria, da el precio directamente, no sigas preguntando.
-- Cierra siempre con calidez: "estamos para servirle", "un placer atenderle", o "estaremos pendientes".
 - Si el cliente pide varios productos en mensajes separados, cotiza CADA UNO a medida que los pida,
   pero NO repitas preguntas que ya le hiciste antes (ciudad, forma de pago, etc.).
 
@@ -234,11 +337,13 @@ FLUJO SEGÚN TIPO DE CONSULTA
 ═══════════════════════════════════════
 
 1. CONSULTA GENÉRICA ("Hola, quiero información" / "Quiero más información"):
-   Responder: "Hola buen día! Para orientarle mejor, ¿qué producto está buscando?"
-   Luego listar las 3 categorías:
-   - Electrodos (¿qué tipo y diámetro necesita?)
-   - Alambre para soldar — MIG sin gas o con gas
-   - Equipo de protección — caretas, guantes, chaquetas, kits
+   Responder corto: "Hola buen día! En qué le podemos ayudar?" o
+                    "Hola! Como le podemos ayudar el dia de hoy?"
+   NO listar las 3 categorías de entrada — solo si el cliente sigue sin
+   especificar después de la pregunta inicial.
+
+   Si después de tu pregunta inicial el cliente sigue ambiguo, ahí sí
+   listar brevemente: "Electrodos, alambre MIG, caretas, antorchas — qué le interesa?"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PRECIOS: REGLA DE ORO
@@ -376,14 +481,49 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
 4. MICROALAMBRE / ALAMBRE MIG:
    Preguntar: ¿con gas o sin gas? ¿qué diámetro? ¿marca actual?
    TIPOS DISPONIBLES (marca American Alloy y Washington Alloy):
-   PRECIOS MICROALAMBRES (con ISV incluido):
-   - ER70S-6 cobrizado 0.035" rollo 33 lbs: L32.06/lb (rollo completo ~L1,058)
-   - E71T-GS flux core sin gas 0.030" de 2 lbs A.A.: L342.85 | de 11 lbs: L977.50
-   - 600HT flux core 0.045" 33 lbs: L293.25/lb
+
+   ⚠️ REGLA CRÍTICA — CUANDO CLIENTE PREGUNTA POR "CALIBRES" / "TODOS" / "QUE
+   DIÁMETROS TIENEN" (v28.3 — bug real reportado por Daniel):
+   Si el cliente pregunta en PLURAL o GENERAL como "tienen de 2 lbs de TODOS
+   los calibres microalambre fluxcore" → DEBES listar TODOS los diámetros que
+   manejás en esa presentación, NO solo uno. Daniel reportó que el bot decía
+   "manejamos solo 0.035 en 2 lbs" cuando en realidad maneja 0.030, 0.035 Y
+   0.045 en 2 lbs. Eso es pérdida de venta.
+
+   ━━━ TABLA EXPLÍCITA DE DIÁMETROS POR PRESENTACIÓN — FLUX CORE E71T-GS ━━━
+   Presentación 2 lbs (carrete chico — A.A.):
+     • 0.030" → L342.85 (E71T-GS 2 lbs A.A.)
+     • 0.035" → L342.85 (E71T-GS 2 lbs A.A.)
+     • 0.045" → L342.85 (E71T-GS 2 lbs A.A.)
+   Presentación 11 lbs (rollo grande — A.A.):
+     • 0.030" → L977.50
+     • 0.035" → L977.50
+     • 0.045" → L977.50
+   600HT flux core (autoprotegido, hardfacing):
+     • 0.045" rollo 33 lbs → L293.25/lb
+
+   ━━━ TABLA DIÁMETROS — ER70S-6 COBRIZADO (CON GAS) ━━━
+   Rollo 33 lbs A.A.:
+     • 0.030" → L32.06/lb (~L1,058 rollo)
+     • 0.035" → L32.06/lb (~L1,058 rollo)
+     • 0.045" → L32.06/lb (~L1,058 rollo)
+   Rollo 11 lbs:
+     • 0.030" / 0.035" / 0.045" — consultar precio en tienda
+
+   ━━━ ESPECIALES ━━━
+   - 309L Gasless inox 0.035" rollo 2 lbs: L1,216.70
    - Aluminio 4043 0.035" 1 lb: L391.00 | 4043 de 3/64" rollo 15 lbs: L402.50/lb
    - Aluminio 5356 0.035" 1 lb: L615.25
-   - 309 Gasless inox 0.035" 2 lbs: L1,216.70
-   Da estos precios directamente cuando el cliente pregunte. Si el cliente tiene el producto actual: pedirle foto para identificar la referencia correcta.
+
+   PATRÓN DE RESPUESTA cuando cliente pregunta general/plural:
+     Cliente: "tienen de 2 libras de todos los calibres microalambre fluxcore?"
+     ✓ Bot: "Si, en flux core E71T-GS 2 lbs A.A. manejamos 0.030, 0.035 y 0.045 —
+             todos a L342.85 con ISV. ¿Cuál calibre necesitás?"
+     ✗ Bot (v26-v28.2 antes de este fix): "El flux core que manejamos es el
+             E71T-GS de 0.035 en 2 lbs a L342.85, solo manejamos ese diámetro
+             en esa presentación." ← OMITE 0.030 y 0.045, pierde venta.
+
+   Si el cliente tiene el producto actual: pedirle foto para identificar la referencia correcta.
 
 5. VARILLAS (soldadura autógena y TIG):
    Disponibles: aluminio (liso y con fundente), acero inoxidable, bronce (lisa y revestida), hierro.
@@ -751,41 +891,141 @@ SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante'
 # no maneja esos productos. Si el cliente pregunta por ellos, el bot debe
 # decir explícitamente que SUMIN no los maneja y sugerir una ferretería.
 
-# ─── PRODUCT IMAGES ──────────────────────────────────────────────────────────
+# ─── PRODUCT IMAGES (v28.3 — expandido a 24 categorías) ──────────────────────
+# Generado por scan del repo (DanielPrado00/sumin-wa-bot/images/*). Cada
+# categoría tiene hasta 4 fotos, priorizando nombres descriptivos (Pro40_*,
+# Delantal_AA_*) sobre IDs numéricos genéricos (770Axxxx, P136xxxx). Daniel
+# reportó (jun-2026) que el bot no estaba mandando fotos cuando el cliente las
+# pedía — la causa era que PRODUCT_IMAGES solo tenía 7 categorías cableadas
+# de las 24 disponibles en el repo. Esta versión cubre todas.
 PRODUCT_IMAGES: dict[str, list[str]] = {
+    "almohadilla": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/almohadilla/770A0408.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/almohadilla/770A0409.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/almohadilla/770A9886.jpg",
+    ],
+    "antorcha_miller": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_miler/770A9718.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_miler/770A9724.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_miler/770A9730.jpg",
+    ],
+    "antorcha_wp26": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_wp26/770A9328.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_wp26/770A9331.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_wp26/770A9333.jpg",
+    ],
+    "antorchas_mfa": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorchas_mfa/770A9514.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorchas_mfa/770A9586.jpg",
+    ],
+    "bolso_electrodos": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/bolso_electrodos/770A0369.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/bolso_electrodos/770A0384.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/bolso_electrodos/770A9842.jpg",
+    ],
+    "boquillas": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/boquillas/770A9449.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/boquillas/770A9450.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/boquillas/770A9454.jpg",
+    ],
     "caretas": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pano56_DeLado.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pano56_Frontal.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pro40_Frontal.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pro40_Lateral.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pano56_Frontal.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/Pano56_DeLado.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/770A9938_2.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/770A9943_2.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/caretas/770A9949.jpg",
+    ],
+    "chaqueta": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/chaqueta/Chaqueta_AA.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/chaqueta/P1362915.jpg",
+    ],
+    "chisperos": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/chisperos/770A9304.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/chisperos/770A9308.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/chisperos/770A9310.jpg",
+    ],
+    "conectores": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/conectores/770A9312.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/conectores/770A9315.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/conectores/770A9316.jpg",
+    ],
+    "delantal": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/delantal/Delantal_AA_Frontal.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/delantal/Delantal_AA_Lateral.jpg",
+    ],
+    "gafas": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/gafas/770A0195.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/gafas/770A0199.jpg",
+    ],
+    "gorros": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/gorros/P1362862.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/gorros/P1362864.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/gorros/P1362870.jpg",
     ],
     "guantes": [
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/HeatProtection14_Lateral.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/HeatProtection14_Palma.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/HeatProtection18_Lateral.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/HeatProtection18_Palma.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/guantes/Weldas14_Negro.jpg",
     ],
-    "chaqueta": [
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/chaqueta/Chaqueta_AA.jpg",
+    "mangas": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/mangas/P1362833.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/mangas/P1362844.jpg",
     ],
-    "delantal": [
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/delantal/Delantal_AA_Frontal.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/delantal/Delantal_AA_Lateral.jpg",
+    "manguera_argon": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/manguera_argon/770A9710.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/manguera_argon/770A9713.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/manguera_argon/770A9822.jpg",
+    ],
+    "manta_soldadura": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/manta_soldadura/770A0340.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/manta_soldadura/770A0342.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/manta_soldadura/770A0345.jpg",
+    ],
+    "polo_tierra": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/polo_tierra/tenaza.jpg",
+    ],
+    "porta_electrodos": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/porta_electrodos/770A9675.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/porta_electrodos/770A9698.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/porta_electrodos/770A9914.jpg",
     ],
     "reguladores": [
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Reguladores_SafeCut450.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/reguladores/770A9630.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/reguladores/770A9637.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/reguladores/770A9865.jpg",
     ],
+    "respiradores": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/respiradores/P1362769.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/respiradores/P1362779.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/respiradores/P1362787.jpg",
+    ],
+    "tiza": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/tiza/770A9589.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/tiza/770A9590.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/tiza/770A9615.jpg",
+    ],
+    "toberas_mig": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/toberas_mig/770A9396.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/toberas_mig/770A9410.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/toberas_mig/770A9413.jpg",
+    ],
+    "oxicorte": [
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Antorcha_SafeCut_CA460_WH450FC.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Reguladores_SafeCut450.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/SafeCut450_Completo1.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/SafeCut450_Completo2.jpg",
+    ],
+    # Aliases para retro-compatibilidad con el código viejo del bot:
     "antorchas": [
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Antorcha_SafeCut_CA460_WH450FC.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_miler/770A9718.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/antorcha_wp26/770A9328.jpg",
     ],
     "equipo_oxicorte": [
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/SafeCut450_Completo1.jpg",
         "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/SafeCut450_Completo2.jpg",
-        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/SafeCut450_Interior.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Antorcha_SafeCut_CA460_WH450FC.jpg",
+        "https://raw.githubusercontent.com/DanielPrado00/sumin-wa-bot/main/images/oxicorte/Reguladores_SafeCut450.jpg",
     ],
 }
 
@@ -934,7 +1174,24 @@ def log_action(agent: str, action: str, detail: str):
     except:
         pass
 
+# v28: TEST MODE infra — when /debug/chat is hit, we set _TEST_CAPTURE to
+# a list and route wa_send through it instead of calling WhatsApp's API.
+# Thread-local so concurrent /debug/chat requests don't cross-contaminate.
+import threading
+_TEST_STATE = threading.local()
+
+
+def _is_test_mode() -> bool:
+    return getattr(_TEST_STATE, "capture", None) is not None
+
+
 def wa_send(to: str, text: str):
+    # v28: in test mode, capture the message instead of sending via WhatsApp API
+    if _is_test_mode():
+        _TEST_STATE.capture.append({"to": to, "text": text})
+        log_action("WA_SEND", f"→ {to} [TEST_MODE]", text[:100])
+        return {"messages": [{"id": "test-captured"}], "test_mode": True}
+
     url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {WA_TOKEN}", "Content-Type": "application/json"}
     body = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
@@ -1189,14 +1446,43 @@ def bot_asked_city(response: str) -> bool:
     return (has_both and has_question) or asks_location
 
 def claude_respond(system: str, conversation_history: list, new_message: str) -> str:
+    """v28.2 — main sales agent reply with EXTENDED THINKING.
+
+    Daniel: 'el bot toma decisiones muy rápidas, ocupa más tiempo para pensarlo'.
+    Solución: extended thinking de Sonnet 4.6 — el modelo reflexiona internamente
+    antes de generar la respuesta visible al cliente. Esto:
+      - Detecta correcciones del cliente que el modelo veloz ignoraba
+      - Distingue mejor entre nombre-de-cliente vs descripción-de-producto
+      - Permite que el modelo planee la respuesta antes de "soltarla"
+
+    Thinking budget = 4000 tokens (~10s extra). max_tokens debe ser
+    >= budget_tokens + 1024 (Anthropic API requirement).
+    """
     messages = conversation_history[-10:] + [{"role": "user", "content": new_message}]
-    msg = claude.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=400,
-        system=system,
-        messages=messages
-    )
-    return msg.content[0].text
+    try:
+        msg = claude.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=5500,            # 4000 thinking + ~1500 output
+            thinking={"type": "enabled", "budget_tokens": 4000},
+            system=system,
+            messages=messages,
+        )
+    except Exception as e:
+        # If extended thinking not supported / API error, fall back to non-thinking
+        log_action("Claude", "thinking_fallback", str(e)[:200])
+        msg = claude.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=600,
+            system=system,
+            messages=messages,
+        )
+    # Find the first text block — when thinking is enabled, the response has
+    # both ThinkingBlock and TextBlock; we want only the visible text.
+    for block in msg.content:
+        if getattr(block, "type", None) == "text":
+            return block.text
+    # Fallback: stringify first block
+    return getattr(msg.content[0], "text", "") if msg.content else ""
 
 def get_conv_meta(state: dict, conv_key: str) -> dict:
     if 'conv_meta' not in state:
@@ -1419,6 +1705,28 @@ _MANOMETRO_HAS_SPECS_RE = re.compile(
 )
 
 
+# v27: accent stripping helper used by both _normalize_query_for_search and
+# _prefilter_catalog. Customers write "panorámica" but Zoho indexes
+# "PANORAMICA" — lowercased substring search misses without this.
+import unicodedata as _unicodedata_v27
+
+def _strip_accents(text: str) -> str:
+    if not text:
+        return text
+    nfd = _unicodedata_v27.normalize("NFD", text)
+    return "".join(ch for ch in nfd if _unicodedata_v27.category(ch) != "Mn")
+
+
+# v27: weight-token extractor for the prefilter's hard-constraint scoring.
+_WEIGHT_RE_V27 = re.compile(r"\b(\d+)\s*(?:lbs?|libras?|kg|kilos?)\b", re.IGNORECASE)
+
+
+def _extract_weights(text: str) -> set[str]:
+    if not text:
+        return set()
+    return {m.group(1) for m in _WEIGHT_RE_V27.finditer(text)}
+
+
 def _normalize_query_for_search(text: str) -> str:
     """Apply synonym expansion + mm→fraction + typo fixes before catalog search.
 
@@ -1432,6 +1740,12 @@ def _normalize_query_for_search(text: str) -> str:
     if not text:
         return text
     out = text
+
+    # v27 Bug B fix: strip Spanish accents FIRST so "panorámica" matches
+    # "PANORAMICA" in catalog. Customers on phone keyboards write accents,
+    # but the Zoho catalog is mostly unaccented. Bring both sides to the
+    # same form so the prefilter's substring search works.
+    out = _strip_accents(out)
 
     # 0) v25: weight canonicalization. Customers/orders write the rollo weight
     #    in many shapes: "33LB", "33lbs", "33 libras", "X 33LB". The Zoho
@@ -1553,12 +1867,21 @@ def _prefilter_catalog(query: str, catalog: list, top_n: int = 200) -> list:
     tokens = _query_tokens(query)
     if not tokens or not catalog:
         return catalog[:top_n]
+    # v27 Bug A: extract weights from the raw query for hard-constraint scoring.
+    # When a customer says "11 lbs", the 11-LBS variant must win even if a
+    # 33-LBS variant has more matching keywords (e.g. 'COBRIZADO' from synonym
+    # expansion that happens to be in the 33-lb name but not the 11-lb name).
+    query_weights = _extract_weights(query)
     scored: list[tuple[int, int, float, dict]] = []
     for item in catalog:
-        name      = (item.get("item_name") or "").lower()
-        sku       = (item.get("sku") or "").lower()
-        descr     = (item.get("description") or "").lower()
-        pdescr    = (item.get("purchase_description") or "").lower()
+        raw_name = item.get("item_name") or ""
+        # v27 Bug B: strip accents on the catalog side too. We compare
+        # accent-stripped lowercase substrings so customer 'panorámica'
+        # matches Zoho 'PANORAMICA'.
+        name      = _strip_accents(raw_name).lower()
+        sku       = _strip_accents(item.get("sku") or "").lower()
+        descr     = _strip_accents(item.get("description") or "").lower()
+        pdescr    = _strip_accents(item.get("purchase_description") or "").lower()
         score = 0
         for t in tokens:
             if t in name:
@@ -1573,6 +1896,20 @@ def _prefilter_catalog(query: str, catalog: list, top_n: int = 200) -> list:
                 score += 1
             if pdescr and t in pdescr:
                 score += 2  # boost — part-numbers are usually in purchase_description
+
+        # v27 Bug A: weight bonus/penalty. If query has a weight token (N lbs,
+        # N kg), give a strong +6 bonus when candidate matches AND a strong -4
+        # penalty when candidate has a different weight. This is essentially a
+        # "hard constraint" without breaking the existing scoring for queries
+        # that don't mention weight at all.
+        if query_weights:
+            cand_weights = _extract_weights(raw_name)
+            if cand_weights:
+                if query_weights & cand_weights:
+                    score += 6
+                elif cand_weights - query_weights:
+                    score -= 4
+
         if score > 0:
             brand_boost = 1 if _is_aa_brand(item) else 0
             stock = float(item.get("stock_on_hand") or 0)
@@ -2607,6 +2944,19 @@ QUOTE_TRIGGERS = [
     "me cotice", "me cotíce",
     # Forma corta "una coti" / "la coti":
     "una coti", "la coti",
+    # v28.3 — Daniel reportó que el bot a veces solo manda texto cuando debería
+    # mandar PDF. Estos triggers cubren "intent de compra" más amplio para
+    # que se dispare el quote_agent (genera PDF automáticamente):
+    "lo llevo", "me lo llevo", "lo quiero", "me lo paso a recoger",
+    "lo paso a recoger", "vendido", "perfecto me sirve",
+    "okay lo confirmo", "ok lo confirmo", "confirmo el pedido",
+    "envíeme la cuenta", "envieme la cuenta", "envíame la cuenta",
+    "envíame el detalle", "pásame el detalle",
+    "me lo factura", "me lo facturan", "factura por favor",
+    "factúrame", "facturame",
+    "armame la cotización", "armame la coti",
+    "pdf", "envíame pdf", "mandame pdf", "envíeme pdf",
+    "documento", "comprobante de cotización",
 ]
 
 # Regex para detectar patrones cantidad + unidad + producto típicos de SUMIN.
@@ -2709,6 +3059,32 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
         "- Si el cliente dijo 'de 10' o 'quiero 10', es la cantidad del producto mencionado en el MISMO o el ANTERIOR mensaje. NO arrastres productos de hace varias cotizaciones.\n"
         "- IGNORA productos que aparecen sólo en el contexto si fueron parte de una cotización anterior ya cerrada (no se confunden con la actual). El historial te sirve para entender el FLUJO, no para acumular productos.\n"
         "\n"
+        "⚠️ REGLA CRÍTICA — customer_name SOLO si es claramente un NOMBRE DE EMPRESA O PERSONA:\n"
+        "El campo `customer_name` SOLO se llena cuando el cliente explícitamente diga:\n"
+        "  • 'a nombre de [X]'\n"
+        "  • 'facturar a [X]'\n"
+        "  • 'para la empresa [X]'\n"
+        "  • 'mi empresa es [X]'\n"
+        "  • 'soy de [X]'\n"
+        "  • 'represento a [X]'\n"
+        "  • presenta RTN/cedula con un nombre\n"
+        "\n"
+        "NUNCA confundas correcciones de productos con nombres de cliente. Si el\n"
+        "cliente dice cosas como 'son boquillas de 1/8', 'no, eran de 0.035',\n"
+        "'eran electrodos de 7018', 'no es 11, es 33 lbs', ESO ES UNA CORRECCIÓN\n"
+        "DE PRODUCTO — el customer_name debe quedar VACÍO (\"\").\n"
+        "\n"
+        "Reglas de validez para customer_name:\n"
+        "  ✗ Si contiene números (excepto en nombres de empresa típicos como 'Proenco 2', 'AC 7000')\n"
+        "  ✗ Si contiene términos técnicos: boquilla, electrodo, alambre, careta, guante,\n"
+        "    chaqueta, mig, tig, lbs, libra, libras, mm, pulgada, rollo, caja\n"
+        "  ✗ Si contiene fracciones: 1/8, 1/4, 3/32, 0.035, etc.\n"
+        "  ✗ Si empieza con preposición ('de', 'para', 'con', 'sin', 'en')\n"
+        "  ✗ Si es muy corto (1-2 caracteres)\n"
+        "  ✗ Si empieza con 'no' / 'si' (correcciones)\n"
+        "  ✗ Si es la palabra 'cliente' o 'persona' (genéricos)\n"
+        "Si en duda, DEJÁ customer_name VACÍO. Es mejor pedirle el nombre que poner uno falso.\n"
+        "\n"
         "⚠️ PESO DEL ROLLO/SPOOL — REGLA CRÍTICA (bug v24-v25):\n"
         "Cuando el cliente describe la PRESENTACIÓN/EMPAQUE de un rollo, ese\n"
         "peso es PARTE DEL PRODUCTO, no la cantidad. Ejemplos:\n"
@@ -2763,10 +3139,68 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
                     )):
                         it["unit"] = "LB"
             customer_name = parsed.get("customer_name", "")
+            # v28.2 — defense in depth: validate customer_name programmatically
+            # in case Haiku ignores the prompt rule. Reject anything that looks
+            # like a product description, correction, or technical spec.
+            customer_name = _sanitize_customer_name(customer_name)
             return items, customer_name
     except Exception as e:
         log_action("QuoteAgent", "extract_error", str(e))
     return [], ""
+
+
+# v28.2: lookalike-token blocker to prevent product specs being saved as
+# customer names. Real bug: client said "son boquillas de 1/8" as a correction
+# and the LLM extracted "boquillas de 1/8" as customer_name, then created a
+# Zoho contact with that garbage name.
+_NAME_FORBIDDEN_TOKENS = {
+    "boquilla", "boquillas", "electrodo", "electrodos", "alambre", "alambres",
+    "careta", "caretas", "guante", "guantes", "chaqueta", "chaquetas",
+    "mig", "tig", "smaw", "gmaw", "lbs", "libra", "libras", "lb",
+    "kg", "kilo", "kilos", "rollo", "rollos", "caja", "cajas",
+    "mm", "pulgada", "pulgadas", "und", "unidad", "unidades",
+    "tobera", "toberas", "difusor", "tip", "tips",
+    "regulador", "reguladores", "manometro", "manómetro",
+    "antorcha", "antorchas", "kit", "set",
+    "6010", "6011", "6013", "7014", "7018", "7024", "8018", "9018",
+    "0.035", "0.030", "0.045", "1/8", "1/4", "3/32", "5/32", "3/16",
+    "no", "si", "no,", "si,", "claro", "ok", "vale",
+    "cliente", "persona",
+}
+_FRACTION_RE_V28 = re.compile(r"\b\d+/\d+\b|\b0\.\d+\b")
+
+
+def _sanitize_customer_name(name: str) -> str:
+    """Returns name unchanged if it looks like a real customer/company name;
+    otherwise returns empty string. Conservative — better to ask for the name
+    again than to save garbage in Zoho contacts.
+    """
+    if not name or not name.strip():
+        return ""
+    n = name.strip()
+    if len(n) < 3:
+        log_action("QuoteAgent", "name_rejected_too_short", n)
+        return ""
+    # Reject if any forbidden token appears as a word in the name
+    low_words = re.findall(r"\b\S+\b", n.lower())
+    for tok in low_words:
+        if tok in _NAME_FORBIDDEN_TOKENS:
+            log_action("QuoteAgent", "name_rejected_product_token", f"'{n}' had '{tok}'")
+            return ""
+    # Reject if it contains a fraction or decimal (technical spec)
+    if _FRACTION_RE_V28.search(n):
+        log_action("QuoteAgent", "name_rejected_spec", n)
+        return ""
+    # Reject names that start with prepositions (likely a fragment, not a name)
+    if low_words and low_words[0] in {"de", "del", "para", "con", "sin", "en", "por", "a"}:
+        log_action("QuoteAgent", "name_rejected_preposition_start", n)
+        return ""
+    # Reject if it's mostly digits
+    digit_chars = sum(1 for c in n if c.isdigit())
+    if digit_chars > len(n) * 0.4:
+        log_action("QuoteAgent", "name_rejected_mostly_digits", n)
+        return ""
+    return n
 
 
 def zoho_search_item_for_quote(product_name: str,
@@ -2837,8 +3271,16 @@ _NORMALIZE_RE = re.compile(r"[^\w\s]+", re.UNICODE)
 
 
 def _normalize_for_match(s: str) -> str:
-    """Normalize a name for token-based comparison."""
-    s = (s or "").lower()
+    """Normalize a name for token-based comparison.
+
+    v28.3 BUG FIX (jun-2026, Daniel reportó caso real):
+    Cliente mandó nombre "Asociación Aloysius" (con acento). En Zoho ya existe
+    "Asociacion Aloysius" (sin acento). Antes _normalize_for_match no removía
+    acentos → 'asociacion' nunca matcheaba 'asociación' → score=0 → bot creó
+    un NUEVO contacto duplicado. Ahora aplicamos _strip_accents primero para
+    que ambas formas converjan a la misma representación.
+    """
+    s = _strip_accents((s or "").lower())
     s = _NORMALIZE_RE.sub(" ", s)
     return " ".join(s.split())
 
@@ -4373,6 +4815,137 @@ async def zoho_callback(request: Request):
 @app.get("/health")
 async def health():
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
+
+
+# ─── DEBUG TEST ENDPOINT (v28) ───────────────────────────────────────────────
+# Lets you run the bot pipeline without sending real WhatsApp messages.
+# Auth: requires X-Debug-Token header matching DEBUG_TOKEN env var.
+# Body: {"phone": "504XXXXXXXX", "text": "...", "reset_state": false,
+#        "msg_type": "text" (or "image"), "media_id": "...", "sleep": false}
+# Returns: {"replies": [{"to": "...", "text": "..."}, ...]}
+# Each customer query → list of replies the bot would have sent.
+#
+# Usage example:
+#   curl -X POST https://sumin-wa-bot.onrender.com/debug/chat \
+#     -H "X-Debug-Token: $DEBUG_TOKEN" \
+#     -H "Content-Type: application/json" \
+#     -d '{"phone": "test-001", "text": "alambre 0.035 11 lbs"}'
+@app.post("/debug/chat")
+async def debug_chat(request: Request):
+    """Run the bot pipeline on a single message WITHOUT calling WhatsApp API."""
+    debug_token = os.environ.get("DEBUG_TOKEN")
+    if not debug_token:
+        return Response(status_code=503, content="DEBUG_TOKEN not configured on server")
+    if request.headers.get("x-debug-token") != debug_token:
+        return Response(status_code=401, content="bad token")
+
+    body = await request.json()
+    phone = body.get("phone", "test-debug-001")
+    text  = body.get("text", "")
+    reset = bool(body.get("reset_state", False))
+    msg_type = body.get("msg_type", "text")
+    sleep_first = bool(body.get("sleep", False))
+
+    # Reset state for this phone if requested (clean conversation context)
+    if reset:
+        state = load_state()
+        if "conversations" in state and phone in state["conversations"]:
+            del state["conversations"][phone]
+        if "_meta" in state and phone in state["_meta"]:
+            del state["_meta"][phone]
+        save_state(state)
+
+    # Build message_data shape matching what /webhook receives
+    message_data = {
+        "from": phone,
+        "from_name": body.get("name", phone),
+        "type": msg_type,
+        "id": body.get("id", f"debug-{int(time.time()*1000)}"),
+    }
+    if msg_type == "text":
+        message_data["text"] = {"body": text}
+    elif msg_type == "image":
+        message_data["image"] = {
+            "id": body.get("media_id", ""),
+            "mime_type": body.get("mime_type", "image/jpeg"),
+        }
+
+    # Enter test mode: capture wa_send instead of calling WhatsApp
+    _TEST_STATE.capture = []
+    try:
+        # Patch the 10-second sleep at start of orchestrate (only if sleep_first=False)
+        # by monkey-patching time.sleep just for this call
+        if not sleep_first:
+            real_sleep = time.sleep
+            time.sleep = lambda *a, **k: None
+            try:
+                orchestrate(message_data)
+            finally:
+                time.sleep = real_sleep
+        else:
+            orchestrate(message_data)
+        captured = list(_TEST_STATE.capture)
+    finally:
+        _TEST_STATE.capture = None
+
+    return {
+        "phone": phone,
+        "input": text,
+        "replies": captured,
+        "n_replies": len(captured),
+    }
+
+
+# Bulk variant: run a list of queries, optionally each with reset_state
+@app.post("/debug/chat/bulk")
+async def debug_chat_bulk(request: Request):
+    debug_token = os.environ.get("DEBUG_TOKEN")
+    if not debug_token:
+        return Response(status_code=503, content="DEBUG_TOKEN not configured on server")
+    if request.headers.get("x-debug-token") != debug_token:
+        return Response(status_code=401, content="bad token")
+
+    body = await request.json()
+    queries = body.get("queries", [])
+    if not isinstance(queries, list):
+        return Response(status_code=400, content="queries must be a list")
+
+    results = []
+    real_sleep = time.sleep
+    time.sleep = lambda *a, **k: None
+    try:
+        for q in queries:
+            phone = q.get("phone", f"test-bulk-{q.get('id', 'auto')}")
+            text  = q.get("text", "")
+            reset = bool(q.get("reset_state", True))  # default reset=True for bulk
+            if reset:
+                state = load_state()
+                if "conversations" in state and phone in state["conversations"]:
+                    del state["conversations"][phone]
+                if "_meta" in state and phone in state["_meta"]:
+                    del state["_meta"][phone]
+                save_state(state)
+
+            message_data = {
+                "from": phone, "from_name": q.get("name", phone),
+                "type": "text", "text": {"body": text},
+                "id": f"bulk-{q.get('id','x')}-{int(time.time()*1000)}",
+            }
+            _TEST_STATE.capture = []
+            try:
+                orchestrate(message_data)
+                captured = list(_TEST_STATE.capture)
+            except Exception as exc:
+                captured = [{"to": phone, "text": f"[ERROR] {exc}"}]
+            finally:
+                _TEST_STATE.capture = None
+            results.append({"id": q.get("id"), "phone": phone, "input": text,
+                            "replies": captured})
+    finally:
+        time.sleep = real_sleep
+
+    return {"n_queries": len(queries), "results": results}
+
 
 @app.get("/privacy")
 async def privacy():
