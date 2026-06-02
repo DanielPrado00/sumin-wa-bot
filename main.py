@@ -3865,10 +3865,64 @@ def _parse_quote_name_response_open(text: str) -> str:
     Strategy: fast paths for trivial cases (empty / "sí" / "sin nombre"), then
     take the literal if it looks like a clean name, otherwise fall back to a
     Haiku LLM extraction.
+
+    v29 BUG FIX (jun-2026): Daniel reportó que cuando cliente escribe "A nombre
+    de CESAR GARCIA" el PDF llegaba con "Facturar a: A nombre de CESAR GARCIA"
+    (literal con el prefijo). Causa: el prefix-strip estaba ANIDADO dentro del
+    'if len(tokens)<=6 and not has_filler', y el fallback del except devolvía
+    el texto sin limpiar. Si el LLM call falla o devuelve el prefijo, el
+    prefijo nunca se quitaba. Fix: extracción de prefijos al INICIO + final.
     """
     t = (text or "").strip().rstrip(".!?¡¿")
     if not t:
         return "Consumidor Final"
+
+    # v29 FIX: normalizar whitespace (clientes a veces escriben "A  nombre de")
+    # con doble espacio que rompía el match de prefix.
+    t = re.sub(r"\s+", " ", t).strip()
+
+    # v29 FIX: extracción de prefijos AL INICIO — antes del fast path 1, 2 y 3,
+    # y AL FINAL del LLM/fallback path. Garantiza que nunca se devuelve un
+    # prefijo "A nombre de" / "Para la empresa" / "Facturar a" en el output.
+    def _strip_known_prefixes(s: str) -> str:
+        """Strip 'a nombre de', 'para la empresa', etc., case-insensitive.
+        Itera porque cliente puede escribir 'es para a nombre de X' con dos
+        prefijos consecutivos."""
+        prefixes = (
+            "a nombre de ", "a nombre del ", "a nombre ",
+            "para la empresa ", "para la compania ", "para la compañia ",
+            "para la compañía ", "para mi empresa ", "para mi compañia ",
+            "para mi compañía ", "para ", "para el ", "para la ",
+            "facturar a ", "facturar para ", "facturar al ",
+            "a la empresa ", "al cliente ", "al señor ", "a la señora ",
+            "cotizar a ", "cotizar para ", "cotizar al ",
+            "es para ", "es de ", "es a nombre de ",
+            "mi nombre es ", "soy ", "represento a ",
+            "hazla a nombre de ", "hagame la a nombre de ",
+            "hagala a nombre de ", "ponela a nombre de ", "ponele ",
+            "generame la a nombre de ", "generela a nombre de ",
+        )
+        s_clean = s.strip()
+        # Iterar hasta que no haya más prefijos para quitar (max 5 iteraciones
+        # para evitar loops si algo se vuelve recursivo).
+        for _ in range(5):
+            s_low = s_clean.lower()
+            matched = False
+            for prefix in prefixes:
+                if s_low.startswith(prefix):
+                    s_clean = s_clean[len(prefix):].strip()
+                    matched = True
+                    break
+            if not matched:
+                break
+        return s_clean.strip(" \"\\\'.,;:")
+
+    # Aplicar el strip al texto raw — esto cambia "A nombre de CESAR GARCIA"
+    # a "CESAR GARCIA" antes de cualquier decisión.
+    t_stripped = _strip_known_prefixes(t)
+    if t_stripped and len(t_stripped.split()) >= 1 and not t_stripped.lower().startswith(("consumidor", "sin nombre")):
+        # Si quedó algo razonable después de strip, usarlo como base
+        t = t_stripped
     t_low = t.lower()
 
     # Fast path 1: explicit "yes" / generic affirm → no name given
@@ -3895,16 +3949,9 @@ def _parse_quote_name_response_open(text: str) -> str:
         )
     )
     if len(tokens) <= 6 and not has_filler:
-        # Strip trivial prefixes
-        for prefix in (
-            "a nombre de ", "a nombre del ", "para la empresa ", "para ",
-            "facturar a ", "facturar para ", "a la empresa ",
-            "cotizar a ", "cotizar para ", "es para ", "es de ",
-        ):
-            if t_low.startswith(prefix):
-                t = t[len(prefix):].strip()
-                break
-        cleaned = t.strip(" \"\\\'.,;:")
+        # v29: redundante con strip inicial, pero defensive — aplicar de nuevo
+        # por si quedaron prefijos no contemplados arriba.
+        cleaned = _strip_known_prefixes(t)
         if cleaned:
             return cleaned[:80]
 
@@ -3937,12 +3984,20 @@ def _parse_quote_name_response_open(text: str) -> str:
         extracted = msg.content[0].text.strip().strip("\"'.,;:")
         if not extracted:
             return "Consumidor Final"
+        # v29 FIX: aplicar strip de prefijos al output del LLM por si devuelve
+        # "A nombre de CESAR GARCIA" en vez de "CESAR GARCIA".
+        extracted = _strip_known_prefixes(extracted)
+        if not extracted:
+            return "Consumidor Final"
         log_action("QuoteAgent", "name_extracted_via_llm", f"'{text[:60]}' → '{extracted[:60]}'")
         return extracted[:80]
     except Exception as e:
         log_action("QuoteAgent", "name_extract_error", str(e)[:200])
-        # Fallback: last-resort literal cleanup
-        return t.strip(" \"\\\'.,;:")[:80] or "Consumidor Final"
+        # Fallback: last-resort literal cleanup.
+        # v29 FIX: aplicar strip de prefijos también en fallback — antes
+        # devolvía "A nombre de CESAR GARCIA" literal cuando LLM fallaba.
+        fallback = _strip_known_prefixes(t).strip(" \"\\\'.,;:")[:80]
+        return fallback or "Consumidor Final"
 
 
 def _parse_quote_name_response(text: str, suggested: str) -> str:
