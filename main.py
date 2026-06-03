@@ -4259,6 +4259,8 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
         line_items = []
         not_found = []
         unit_mismatches = []
+        needs_price = []         # v29.3: items que matchearon pero tienen rate=0 en Zoho
+        fraction_mismatches = [] # v29.3: items donde el matching ignoró la fracción
         for req in items_requested:
             req_unit = _normalize_unit(req.get("unit", ""))
             zoho_item = zoho_search_item_for_quote(req["product"], requested_unit=req_unit)
@@ -4269,6 +4271,37 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                         f"{req['product']} (pidió {req_unit}, en catálogo solo hay {matched_unit})"
                     )
                     continue
+
+                # v29.3 BUG FIX (jun-2026): Daniel reportó cotización EST-005149
+                # donde cliente pidió ER4043 TIG 1/16 y el bot matcheó al
+                # ER4043 3/32 (con precio L310) en lugar de avisar que el 1/16
+                # no existe. Verificar que la FRACCIÓN del query aparece en el
+                # nombre del item — si pidió 1/16 y el matched name tiene 3/32
+                # o 1/8 explícitamente, ese match es FALSO.
+                req_fracs = set(re.findall(r"\b\d+/\d+\b", req["product"]))
+                cand_fracs = set(re.findall(r"\b\d+/\d+\b", zoho_item.get("name", "") or ""))
+                if req_fracs and cand_fracs and not (req_fracs & cand_fracs):
+                    fraction_mismatches.append(
+                        f"{req['product']} (pidió fracción {','.join(req_fracs)}, en catálogo solo {','.join(cand_fracs)})"
+                    )
+                    continue
+
+                # v29.3 BUG FIX: Daniel reportó ER316L 1/16 cotizado a L0.00 —
+                # el item existía en Zoho pero el campo rate estaba vacío.
+                # Estos items NO deben entrar en el PDF formal — el cliente
+                # recibe cotización con totales bajos/inválidos. Excluir y
+                # marcar como "precio por confirmar".
+                rate = float(zoho_item.get("rate") or 0)
+                if rate <= 0:
+                    needs_price.append({
+                        **zoho_item,
+                        "quantity": max(1, int(req.get("quantity", 1))),
+                        "requested_product": req["product"],
+                    })
+                    log_action("QuoteAgent", "skipped_zero_rate",
+                               f"sku={zoho_item.get('sku','?')} name={zoho_item.get('name','')[:50]}")
+                    continue
+
                 line_items.append({**zoho_item,
                                    "quantity": max(1, int(req.get("quantity", 1)))})
             else:
@@ -4284,7 +4317,26 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
             )
             return
 
+        # v29.3: si NO hay line_items con precio válido pero SÍ hay items en
+        # needs_price o fraction_mismatches, avisarlos explícitamente al cliente
+        # en lugar del mensaje genérico "no pude ubicar".
         if not line_items:
+            problems = []
+            if needs_price:
+                names = ", ".join((n.get("name") or n.get("requested_product",""))[:50] for n in needs_price)
+                problems.append(f"Sin precio cargado: {names}")
+            if fraction_mismatches:
+                problems.append("Medidas no disponibles:\n  • " + "\n  • ".join(fraction_mismatches))
+            if not_found:
+                problems.append("No encontrados: " + ", ".join(not_found))
+            if problems:
+                wa_send(
+                    from_number,
+                    "No puedo generar la cotización automática por estos puntos:\n\n"
+                    + "\n\n".join(problems)
+                    + f"\n\nPara cotización manual, comuníquese al {ELECTRODE_REDIRECT_PHONE}. 📋",
+                )
+                return
             product_list = ", ".join(r["product"] for r in items_requested)
             wa_send(
                 from_number,
@@ -4294,6 +4346,25 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                 "Podemos enviarla por WhatsApp o correo electrónico. 📋",
             )
             return
+
+        # v29.3: si HAY line_items válidos pero algunos quedaron en needs_price
+        # o fraction_mismatches, generar el PDF de los que SÍ tienen precio y
+        # avisar al cliente que los otros requieren cotización manual.
+        if needs_price or fraction_mismatches:
+            warning_lines = []
+            if needs_price:
+                names = ", ".join((n.get("name") or n.get("requested_product",""))[:50] for n in needs_price)
+                warning_lines.append(f"⚠️ Sin precio cargado: {names}")
+            if fraction_mismatches:
+                warning_lines.append("⚠️ Medidas no disponibles:")
+                for fm in fraction_mismatches:
+                    warning_lines.append(f"   • {fm}")
+            warning_text = "\n".join(warning_lines)
+            # Guardar el warning en pending_quote para incluirlo cuando se mande la cotización final
+            # (lo usamos en submit_pending_quote_to_console / al final del flow)
+            # Por ahora: notificar antes de avanzar.
+            log_action("QuoteAgent", "partial_quote_with_warnings",
+                       f"valid={len(line_items)} skipped={len(needs_price)+len(fraction_mismatches)}")
 
         # Trusted users (vendedores SUMIN reenviando solicitudes de clientes
         # finales) cotizan para clientes distintos en cada conversación. NO
