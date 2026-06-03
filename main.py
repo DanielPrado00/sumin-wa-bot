@@ -430,12 +430,42 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    - Tensile Weld de 1/8: L333.50/lb | de 5/32: L356.50/lb
 
    ELECTRODOS HIERRO COLADO (precio por libra y por caja de 10 lbs, con ISV):
-   - NI-55 de 1/8: L52.00/lb | caja 10 lbs: L520.00
-   - NI-55 de 3/32: L51.00/lb | caja 10 lbs: L510.00
-   - NI-99 de 1/8 A.A.: L75.00/lb | caja 10 lbs: L750.00
-   - NI-99 de 3/32: L67.00/lb | caja 10 lbs: L670.00
-   - NI-99 de 5/32: L123.00/lb | caja 10 lbs: L1,230.00
-   Da estos precios directamente. SÍ manejamos NI-55 y NI-99 para hierro colado.
+   ━━━ v29.4 PRECIOS REALES DE ZOHO + 15% ISV (jun-2026) ━━━
+   ⚠️ BUG HISTÓRICO CORREGIDO: los precios anteriores estaban etiquetados
+   como "por libra" pero eran realmente PRECIOS POR UNIDAD. El bot estaba
+   cotizando "caja 10 lbs = L520" cuando en realidad eran 10 UNIDADES
+   sueltas, no 10 libras. Una libra de NI-55 tiene aprox. 9-12 electrodos
+   según el diámetro, así que la caja real de 10 lbs vale ~10× lo que se
+   estaba cobrando.
+
+   NI-55 (níquel/hierro 55%, para hierro colado gris):
+   POR LIBRA (precios con ISV incluido):
+   - NI-55 de 1/8 LB: L569.25/lb | caja 10 lbs: L5,692.50
+   - NI-55 de 3/32 LB: L713.00/lb | caja 10 lbs: L7,130.00
+   - NI-55 de 5/32 LB: L713.00/lb | caja 10 lbs: L7,130.00
+   - NI-55 de 3/16 LB (hardfacing): L977.50/lb | caja 10 lbs: L9,775.00
+   POR UNIDAD SUELTA (cliente pide "un electrodo" / "1 und"):
+   - NI-55 1/8 UND: L52.00 c/u (con ISV)
+   - NI-55 3/32 UND: L51.00 c/u (con ISV)
+
+   NI-99 (níquel 99%, para hierro colado nodular y reparación):
+   POR LIBRA (precios con ISV incluido):
+   - NI-99 de 1/8 A.A. LB: L793.50/lb | caja 10 lbs: L7,935.00
+   - NI-99 de 3/32 LB: L839.50/lb | caja 10 lbs: L8,395.00
+   - NI-99 de 5/32 LB: L818.80/lb | caja 10 lbs: L8,188.00
+   POR UNIDAD SUELTA:
+   - NI-99 1/8 UND: L75.00 c/u (con ISV)
+   - NI-99 3/32 UND: L67.00 c/u (con ISV)
+   - NI-99 5/32 UND: L123.00 c/u (con ISV)
+
+   ⚠️ DIFERENCIA CRÍTICA: cuando el cliente pide "1 lb" o "una libra" o
+   "10 lbs" o "caja 10 lbs" → usar precio POR LIBRA (cifras de arriba).
+   Cuando pide "1 electrodo" / "1 unidad" / "uno suelto" → usar precio
+   POR UNIDAD (cifras más bajas). NUNCA mezcles los dos — confundir
+   precio por unidad con precio por libra subcotiza al ~10%.
+
+   Si [INVENTARIO ZOHO] inyecta un precio distinto, usá el de Zoho (es
+   la fuente de verdad). Los precios arriba son fallback si Zoho no responde.
 
    ELECTRODOS ALUMINIO (TODOS POR LIBRA, con ISV — mínimo 1/4 lb):
    - Manejamos: E4043 azul (3/32, 1/8) y Blanco (3/32, 1/8).
