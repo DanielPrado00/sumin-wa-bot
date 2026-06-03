@@ -412,11 +412,30 @@ Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el produ
    - REVESTIMIENTOS DUROS excepto Everwear 800 (E-300, E-700, American Sugar, Chrome Carb, etc.)
 
    PRECIOS DE REFERENCIA — HIERROS DULCES (marca A.A., ISV incluido):
-   - E6010: caja 10 lbs = L517.50 | caja 50 lbs = L2,587.50   (3/32", 1/8", 5/32")
-   - E6011: caja 10 lbs = L517.50 | caja 50 lbs = L2,587.50   (3/32", 1/8", 5/32")
-   - E6013: caja 10 lbs = L437.00 | caja 50 lbs = L2,185.00   (3/32", 1/8") — también hay marcas Lincoln, W.A.
-   - E7018: caja 10 lbs = L414.00 | caja 50 lbs = L2,070.00   (3/32", 1/8", 5/32")
-   - E7024: caja 10 lbs = L460.00 | caja 50 lbs = L2,300.00   (1/8")
+   ━━━ v29.5 FORMATO INEQUÍVOCO (jun-2026) ━━━
+   ⚠️ BUG HISTÓRICO CORREGIDO: el formato anterior "caja 10 lbs = L414" era
+   ambiguo y el LLM a veces interpretaba L414 como precio POR LIBRA en lugar
+   de PRECIO TOTAL DE LA CAJA. Cliente pidió 120 lbs E7018 1/8 y el bot
+   cotizó L49,680 (= 120 × L414) cuando lo real es L4,968 (= 120 × L41.40).
+   Ahora el precio /lb es PRIMARIO y el de caja es derivado parentético.
+
+   FÓRMULA para cualquier cantidad:
+     Precio total = (cantidad en libras) × (precio por libra)
+     Caja 10 lbs = 10 × precio_lb
+     Caja 50 lbs = 50 × precio_lb
+
+   E6010: *L51.75/lb* (caja 10 lbs = L517.50 | caja 50 lbs = L2,587.50) — diámetros 3/32", 1/8", 5/32"
+   E6011: *L51.75/lb* (caja 10 lbs = L517.50 | caja 50 lbs = L2,587.50) — diámetros 3/32", 1/8", 5/32"
+   E6013: *L43.70/lb* (caja 10 lbs = L437.00 | caja 50 lbs = L2,185.00) — diámetros 3/32", 1/8" — también hay marcas Lincoln, W.A.
+   E7018: *L41.40/lb* (caja 10 lbs = L414.00 | caja 50 lbs = L2,070.00) — diámetros 3/32", 1/8", 5/32"
+   E7024: *L46.00/lb* (caja 10 lbs = L460.00 | caja 50 lbs = L2,300.00) — diámetro 1/8"
+
+   EJEMPLOS de cálculo correcto:
+     • 50 lbs E7018 1/8: 50 × L41.40 = L2,070 (= 1 caja de 50 lbs)
+     • 120 lbs E7018 1/8: 120 × L41.40 = L4,968 (= 12 cajas de 10 lbs o 2 cajas 50 + 1 caja 20)
+     • 25 lbs E6011: 25 × L51.75 = L1,293.75
+     • 1 caja 10 lbs E6013: 10 × L43.70 = L437.00 (NO L43.70, es la CAJA completa)
+   NUNCA hagas: 120 lbs × precio_caja → resultado 10x mayor que el real.
 
    ELECTRODOS ACERO INOXIDABLE (precio por libra, con ISV — mínimo 1/4 lb):
    - E308-16 de 1/8: L138.00/lb | de 3/32: L161.00/lb | de 5/32: L247.25/lb
