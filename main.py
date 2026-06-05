@@ -1777,23 +1777,90 @@ _PRODUCT_SYNONYMS: dict[str, list[str]] = {
 # ─── DIMENSION NORMALIZATION ───────────────────────────────────────────────
 # Customers say "2.4 mm" but Zoho indexes as "3/32"". We translate before
 # searching. Common SUMIN electrode/welding-wire fractions only.
+#
+# v29.6 (jun-2026): Daniel reportó que "precio del e71t-gs de 0.8 mm de 10
+# libras?" devolvió "No encontrados". El catálogo SÍ tiene el ítem
+# (MICROALAMBRE E71T-GS 0.030"(0.8mm) 10 LBS A.A. SKU HANK-6010056) pero
+# "0.8 mm" no se normalizaba a "0.030" porque la tabla empezaba en 1.6mm
+# (electrodos). Para MIG/microalambre los diámetros son decimal-inch (0.030,
+# 0.035, 0.045), NO fracciones. Agregar la fila 0.6→0.024, 0.8→0.030,
+# 0.9→0.035, 1.0→0.040, 1.2→0.045 hace que el prefilter Y el LLM matcher
+# vean "0.030" cuando el cliente escribe "0.8 mm".
 _MM_TO_FRACTION: dict[str, str] = {
-    "1.6": "1/16",
-    "2.0": "5/64",
-    "2.4": "3/32",
-    "2.5": "3/32",   # close enough
-    "3.0": "1/8",    # close enough
-    "3.2": "1/8",
+    # MIG / microalambre — decimal-inch (no fracciones)
+    "0.6":  "0.024",
+    "0.8":  "0.030",
+    "0.9":  "0.035",
+    "1.0":  "0.040",
+    "1.2":  "0.045",
+    # Electrodo / varilla — fracciones imperiales
+    "1.6":  "1/16",
+    "2.0":  "5/64",
+    "2.4":  "3/32",
+    "2.5":  "3/32",   # close enough
+    "3.0":  "1/8",    # close enough
+    "3.2":  "1/8",
     "3.25": "1/8",
-    "4.0": "5/32",
-    "4.8": "3/16",
-    "5.0": "3/16",   # close enough
-    "5.6": "7/32",
-    "6.0": "1/4",    # close enough
-    "6.4": "1/4",
-    "8.0": "5/16",
+    "4.0":  "5/32",
+    "4.8":  "3/16",
+    "5.0":  "3/16",   # close enough
+    "5.6":  "7/32",
+    "6.0":  "1/4",    # close enough
+    "6.4":  "1/4",
+    "8.0":  "5/16",
     "10.0": "3/8",
 }
+
+# v29.6: diámetros MIG decimal-inch que aparecen "raw" en queries del cliente
+# (sin "mm" porque ya están en pulgadas decimales). Sirve para clasificar
+# microalambre vs electrodo basado SOLO en el texto del query.
+_MIG_DECIMAL_INCH_SIZES = {"0.024", "0.030", "0.035", "0.040", "0.045"}
+
+# v29.6: prefijos/alloys que identifican un producto como MICROALAMBRE/MIG
+# (rollos, unit=ROLLO) en lugar de ELECTRODO revestido (lb suelta, unit=LB).
+# Cuando aparecen en el product name, el unit backfill debe ir a ROLLO, no LB.
+_MICROALAMBRE_ALLOY_HINTS = (
+    "e71t-gs", "e71t", "e71tgs",          # flux-cored gasless
+    "er70s-6", "er70s6", "er70s-3", "er70s-7",
+    "er308l", "er308", "er309l", "er309", "er316l", "er316",
+    "er4043", "er5356",                    # aluminio MIG
+    "microalambre", "micro alambre",
+    "alambre mig", "alambre flux", "alambre fluxcore",
+    "fluxcore", "flux cored", "fcaw", "gmaw",
+    "cobrizado", "cobriz",                 # ER70S-6 a menudo se llama así
+    "chromium",                            # alambres especiales overlay
+    "600 ht", "600ht",
+)
+
+
+def _looks_like_microalambre(product_name: str) -> bool:
+    """v29.6: True si el product name evidentemente describe un MIG/microalambre
+    en lugar de un electrodo revestido. Usado para corregir el unit backfill
+    (microalambre → ROLLO, electrodo → LB) en extract_items_for_quote.
+
+    Heurística:
+      1. Alloy/keyword conocido de MIG (E71T-GS, ER70S-6, microalambre, etc.)
+      2. Diámetro decimal-inch típico de MIG (0.030, 0.035, 0.045)
+      3. Diámetro en mm < 1.6 (todo lo más fino que el 1/16" es microalambre)
+    """
+    if not product_name:
+        return False
+    pname = product_name.lower()
+    for kw in _MICROALAMBRE_ALLOY_HINTS:
+        if kw in pname:
+            return True
+    # Decimal-inch sizes raw ("0.030", "0.035", "0.045")
+    for size in _MIG_DECIMAL_INCH_SIZES:
+        if re.search(rf"\b{re.escape(size)}\b", pname):
+            return True
+    # mm < 1.6
+    for m in re.finditer(r"\b(\d+(?:\.\d+)?)\s*mm\b", pname, re.IGNORECASE):
+        try:
+            if float(m.group(1)) < 1.6:
+                return True
+        except ValueError:
+            pass
+    return False
 
 # Common typos: "1.8" usually means "1/8" on phone keyboards (people miss the "/").
 # Map ambiguous "X.Y" → "X/Y" only for valid SUMIN fractions to avoid corrupting
@@ -3230,6 +3297,21 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
         "- Si el cliente NO especificó la unidad, devuelve \"\" (string vacío).\n"
         "- NUNCA inventes la unidad — si hay duda, devuelve \"\".\n"
         "- Los ELECTRODOS de soldadura (6010, 6011, 6013, 7018, 7024, E308, E309, E316, Everwear, NI-55, NI-99, etc.) se venden por LIBRA por defecto. Solo los electrodos de TUNGSTENO (TIG) se venden por UND.\n\n"
+        "⚠️ MICROALAMBRE / MIG vs ELECTRODO — clasificación CRÍTICA (v29.6):\n"
+        "Si el cliente menciona alguno de estos alloys o keywords, ES MICROALAMBRE (rollo), NO electrodo revestido:\n"
+        "  • E71T-GS, E71T, E71TGS  → MIG flux-cored gasless\n"
+        "  • ER70S-6, ER70S-3, ER70S-7 → MIG cobrizado para acero\n"
+        "  • ER308L, ER309L, ER316L → MIG inox\n"
+        "  • ER4043, ER5356 → MIG aluminio\n"
+        "  • 'microalambre', 'fluxcore', 'flux cored', 'cobrizado', 'FCAW', 'GMAW' → siempre MIG\n"
+        "  • 'Chromium', '600 HT' → alambres overlay (rollo)\n"
+        "Para estos productos: unit='ROLLO' (por defecto) y NO uses prefijo 'electrodo' en `product`.\n"
+        "Diámetros de MIG son decimal-inch (0.024, 0.030, 0.035, 0.040, 0.045) o mm fino (0.6, 0.8, 0.9, 1.0, 1.2 mm). Si ves esos diámetros, casi siempre es MIG.\n"
+        "Diámetros de ELECTRODO revestido son fracciones (1/16, 5/64, 3/32, 1/8, 5/32, 3/16, 1/4) o mm grueso (≥ 1.6 mm). Solo esos van como 'electrodo' + unit='LB'.\n"
+        "Ejemplos:\n"
+        "  • 'e71t-gs 0.8 mm 10 lbs' → product='E71T-GS 0.030 10 LBS' quantity=1 unit='ROLLO'\n"
+        "  • 'microalambre 0.035 cobrizado 11 lbs' → product='microalambre ER70S-6 0.035 11 LBS' quantity=1 unit='ROLLO'\n"
+        "  • 'electrodo 7018 1/8 50 lbs' → product='electrodo 7018 1/8 50 LBS' quantity=1 unit='CAJA' (caja de 50 lbs)\n\n"
         "OTRAS REGLAS:\n"
         "- Un nombre de empresa (como 'Proenco', 'ACSA', etc.) NO es un producto — es el destinatario.\n"
         "- Si el cliente dijo 'de 10' o 'quiero 10', es la cantidad del producto mencionado en el MISMO o el ANTERIOR mensaje. NO arrastres productos de hace varias cotizaciones.\n"
@@ -3303,17 +3385,42 @@ def extract_items_for_quote(text: str, history: list) -> tuple[list[dict], str]:
             # Backfill: if Haiku forgot the unit but the product looks like an
             # electrode, default to LB (welding electrodes are always LB unless
             # tungsten). Tungsten → UND.
+            #
+            # v29.6: MICROALAMBRE / MIG → ROLLO. Antes el bot tomaba "electrodo
+            # E71T-GS 0.8 mm de 10 libras" → unit=LB, lo que filtraba el rollo
+            # 10 LBS A.A. (unit=ROLLO) del catálogo y devolvía "no encontrado".
+            # Discriminamos por alloy (E71T-GS, ER70S-6, ER308L...) o por
+            # diámetro decimal-inch típico de MIG (0.030/0.035/0.045) o por mm
+            # < 1.6 (todo lo más fino que el 1/16" es microalambre).
             for it in items:
                 if not it.get("unit"):
                     pname = (it.get("product") or "").lower()
                     if "tungsteno" in pname or "tig" in pname:
                         it["unit"] = "UND"
+                    elif _looks_like_microalambre(pname):
+                        it["unit"] = "ROLLO"
                     elif any(k in pname for k in (
                         "electrodo", "6010", "6011", "6013", "7018", "7024",
                         "everwear", "ni-55", "ni55", "ni-99", "ni99",
                         "e308", "e309", "e316", "e310", "e312",
                     )):
                         it["unit"] = "LB"
+                # v29.6: si Haiku puso "electrodo" en el nombre PERO el resto
+                # del nombre es claramente microalambre (E71T-GS, ER70S-6 con
+                # diámetro decimal), corregir el unit a ROLLO. Cliente pide
+                # "electrodo E71T-GS 0.8mm" → realmente es MICROALAMBRE.
+                elif it.get("unit") == "LB":
+                    pname = (it.get("product") or "").lower()
+                    if "electrodo" in pname and _looks_like_microalambre(pname):
+                        log_action("QuoteAgent", "unit_corrected_microalambre",
+                                   f"'{pname[:60]}' LB → ROLLO")
+                        it["unit"] = "ROLLO"
+                        # Limpiar el prefijo "electrodo" para que el matcher
+                        # busque microalambre en el catálogo.
+                        it["product"] = re.sub(
+                            r"^\s*electrodos?\s+", "", it.get("product", ""),
+                            flags=re.IGNORECASE,
+                        ).strip()
             customer_name = parsed.get("customer_name", "")
             # v28.2 — defense in depth: validate customer_name programmatically
             # in case Haiku ignores the prompt rule. Reject anything that looks
@@ -3433,6 +3540,97 @@ def zoho_search_item_for_quote(product_name: str,
     except Exception as e:
         log_action("ZohoAPI", "quote_search_error", str(e))
     return None
+
+
+# v29.6: soft-match de presentaciones. Cuando el matcher EXACTO falla, busca
+# variantes del MISMO alloy+diámetro pero con peso/presentación distinta.
+# Ejemplo: cliente pide "E71T-GS 0.030 5 LBS" (no existe) → devuelve los
+# variants en 2 LBS, 2.2 LBS, 10 LBS y 11 LBS.
+_WEIGHT_TOKEN_RE_V296 = re.compile(
+    r"\b\d+(?:\.\d+)?\s*(?:lbs?|libras?|kg|kilos?)\b",
+    re.IGNORECASE,
+)
+
+
+def _find_alternative_presentations(
+    product_name: str,
+    max_alternatives: int = 5,
+) -> list[dict]:
+    """v29.6: Cuando un producto NO se encontró con la presentación pedida,
+    devolver variantes del mismo alloy+diámetro con presentaciones distintas.
+
+    Ejemplo:
+      product_name = "E71T-GS 0.030 5 LBS" (no existe en catálogo)
+      → devuelve:
+        [
+          {"item_name": "MICROALAMBRE E71T-GS 0.030\"(0.8mm) 10 LBS A.A.", "rate": 1045.44, ...},
+          {"item_name": "MICROALAMBRE E71T-GS 0.030\" 2 LBS A.A.", "rate": 298.13, ...},
+          ...
+        ]
+
+    Devuelve lista vacía si:
+      - El query NO menciona ningún peso (no aplica soft-match)
+      - No se encontró NADA del mismo alloy+diámetro
+    """
+    if not product_name:
+        return []
+    # Si el query no menciona peso, este soft-match no aplica
+    if not _WEIGHT_TOKEN_RE_V296.search(product_name):
+        return []
+
+    catalog = fetch_zoho_catalog()
+    if not catalog:
+        return []
+
+    # Quitar el peso del query para que el prefilter rankee por alloy+diámetro
+    no_weight = _WEIGHT_TOKEN_RE_V296.sub("", product_name).strip()
+    no_weight = re.sub(r"\s+", " ", no_weight)
+
+    # Necesitamos al menos 2 tokens significativos en el query sin peso para
+    # que las alternativas sean confiables (alloy + diámetro)
+    base_tokens = set(_query_tokens(no_weight))
+    if len(base_tokens) < 2:
+        return []
+
+    focused = _prefilter_catalog(no_weight, catalog, top_n=20)
+    if not focused:
+        return []
+
+    alternatives = []
+    seen_names = set()
+    for item in focused:
+        name = item.get("item_name") or ""
+        if not name:
+            continue
+        # Solo items con precio cargado (sino el cliente verá L0.00 cuando elija)
+        rate = float(item.get("rate") or 0)
+        if rate <= 0:
+            continue
+        # Verificar que el item realmente comparte ≥2 tokens del alloy+diámetro
+        item_tokens = set(_query_tokens(name))
+        overlap = base_tokens & item_tokens
+        if len(overlap) < 2:
+            continue
+        # Dedupe por nombre normalizado
+        key = name.strip().lower()
+        if key in seen_names:
+            continue
+        seen_names.add(key)
+        alternatives.append({
+            "item_id":   item.get("item_id", ""),
+            "item_name": name,
+            "sku":       item.get("sku", ""),
+            "rate":      rate,
+            "unit":      item.get("unit", ""),
+        })
+        if len(alternatives) >= max_alternatives:
+            break
+
+    if alternatives:
+        log_action("ZohoAPI", "soft_match_alternatives",
+                   f"query='{product_name[:50]}' found={len(alternatives)} "
+                   f"top='{alternatives[0]['item_name'][:50]}'")
+    return alternatives
 
 
 _LEGAL_FORM_TOKENS = {
@@ -4310,9 +4508,18 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
         unit_mismatches = []
         needs_price = []         # v29.3: items que matchearon pero tienen rate=0 en Zoho
         fraction_mismatches = [] # v29.3: items donde el matching ignoró la fracción
+        soft_alternatives = []   # v29.6: items no encontrados con presentación exacta pero existen variantes
         for req in items_requested:
             req_unit = _normalize_unit(req.get("unit", ""))
             zoho_item = zoho_search_item_for_quote(req["product"], requested_unit=req_unit)
+            # v29.6: si el unit pedido es ROLLO/LB y no salió match, reintentar
+            # SIN filtro de unidad — el catálogo es inconsistente (mismo MIG
+            # cobrizado catalogado como ROLLO en un variant y LB en otro).
+            if (not zoho_item or not zoho_item.get("item_id")) and req_unit in ("LB", "ROLLO"):
+                zoho_item = zoho_search_item_for_quote(req["product"], requested_unit="")
+                if zoho_item and zoho_item.get("item_id"):
+                    log_action("QuoteAgent", "retry_no_unit_filter",
+                               f"req_unit={req_unit} matched='{zoho_item.get('name','')[:60]}'")
             if zoho_item and zoho_item.get("item_id"):
                 matched_unit = _normalize_unit(zoho_item.get("unit", ""))
                 if req_unit and matched_unit and req_unit != matched_unit:
@@ -4354,7 +4561,17 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                 line_items.append({**zoho_item,
                                    "quantity": max(1, int(req.get("quantity", 1)))})
             else:
-                not_found.append(req["product"])
+                # v29.6: antes de declarar "no encontrado", intentar soft-match
+                # de presentaciones — si el cliente pidió 10 lbs y solo existe en
+                # 11 lbs, sugerir las alternativas en lugar de cortar la venta.
+                alternatives = _find_alternative_presentations(req["product"])
+                if alternatives:
+                    soft_alternatives.append({
+                        "req": req,
+                        "options": alternatives,
+                    })
+                else:
+                    not_found.append(req["product"])
 
         if unit_mismatches and not line_items:
             wa_send(
@@ -4369,7 +4586,33 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
         # v29.3: si NO hay line_items con precio válido pero SÍ hay items en
         # needs_price o fraction_mismatches, avisarlos explícitamente al cliente
         # en lugar del mensaje genérico "no pude ubicar".
+        # v29.6: ANTES de mostrar "no encontrado", si hay soft_alternatives,
+        # ofrecer las presentaciones disponibles al cliente — no cortar la venta.
         if not line_items:
+            # v29.6: priorizar soft-match — mostrar alternativas ANTES del mensaje
+            # genérico "no encontrado" / "no puedo generar".
+            if soft_alternatives:
+                msg_parts = ["No tengo la presentación exacta que pidió, pero sí manejo estas:\n"]
+                for alt in soft_alternatives:
+                    req = alt["req"]
+                    opts = alt["options"]
+                    msg_parts.append(f"\n*Para {req['product']}:*")
+                    for o in opts[:5]:
+                        rate_with_isv = round(float(o.get("rate", 0)) * 1.15, 2)
+                        unit_label = o.get("unit") or "UND"
+                        msg_parts.append(
+                            f"  • {o['item_name']} — *L{rate_with_isv}/{unit_label}* (con ISV)"
+                        )
+                msg_parts.append(
+                    "\n\n¿Le sirve alguna? Confírmeme cuál y la cantidad para "
+                    "preparar la cotización formal."
+                )
+                wa_send(from_number, "\n".join(msg_parts))
+                log_action("QuoteAgent", "soft_match_offered",
+                           f"alternatives={sum(len(a['options']) for a in soft_alternatives)} "
+                           f"reqs={len(soft_alternatives)}")
+                return
+
             problems = []
             if needs_price:
                 names = ", ".join((n.get("name") or n.get("requested_product",""))[:50] for n in needs_price)
@@ -4399,7 +4642,9 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
         # v29.3: si HAY line_items válidos pero algunos quedaron en needs_price
         # o fraction_mismatches, generar el PDF de los que SÍ tienen precio y
         # avisar al cliente que los otros requieren cotización manual.
-        if needs_price or fraction_mismatches:
+        # v29.6: también surface las soft_alternatives aquí como "para los otros
+        # ítems no tengo la presentación exacta pero manejo estas".
+        if needs_price or fraction_mismatches or soft_alternatives:
             warning_lines = []
             if needs_price:
                 names = ", ".join((n.get("name") or n.get("requested_product",""))[:50] for n in needs_price)
@@ -4408,12 +4653,24 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                 warning_lines.append("⚠️ Medidas no disponibles:")
                 for fm in fraction_mismatches:
                     warning_lines.append(f"   • {fm}")
+            if soft_alternatives:
+                warning_lines.append("⚠️ Presentación exacta no disponible — alternativas:")
+                for alt in soft_alternatives:
+                    req = alt["req"]
+                    warning_lines.append(f"   • Para {req['product']}:")
+                    for o in alt["options"][:3]:
+                        rate_with_isv = round(float(o.get("rate", 0)) * 1.15, 2)
+                        unit_label = o.get("unit") or "UND"
+                        warning_lines.append(
+                            f"      - {o['item_name']} (L{rate_with_isv}/{unit_label})"
+                        )
             warning_text = "\n".join(warning_lines)
             # Guardar el warning en pending_quote para incluirlo cuando se mande la cotización final
             # (lo usamos en submit_pending_quote_to_console / al final del flow)
             # Por ahora: notificar antes de avanzar.
             log_action("QuoteAgent", "partial_quote_with_warnings",
-                       f"valid={len(line_items)} skipped={len(needs_price)+len(fraction_mismatches)}")
+                       f"valid={len(line_items)} skipped={len(needs_price)+len(fraction_mismatches)} "
+                       f"soft={len(soft_alternatives)}")
 
         # Trusted users (vendedores SUMIN reenviando solicitudes de clientes
         # finales) cotizan para clientes distintos en cada conversación. NO
