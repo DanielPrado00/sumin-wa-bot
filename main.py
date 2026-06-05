@@ -1001,6 +1001,248 @@ EQUIVALENCIAS DE NOMBRE QUE EL CLIENTE USA ↔ NOMBRE EN ZOHO:
 • "electrodo 800" / "E800" → también es NiCrFe-3.
 """
 
+# ════════════════════════════════════════════════════════════════════════════
+# v30 NIVEL 2 — REFACTOR DEL PROMPT: split SUMIN_SYSTEM en CORE + MODULES.
+#
+# Daniel reportó (jun-2026, audit v1→v29.5) que el prompt creció a ~10K tokens
+# y el modelo no estaba siguiendo todas las reglas. Análisis:
+#   - 42,715 chars / 787 líneas / ~10,678 tokens
+#   - 9 secciones numeradas + bloques de boquillas/MIG difusor/sistemas Miller
+#   - Cada conversación necesita solo 1-2 secciones de producto, pero estamos
+#     mandando las 9 en cada turno.
+#
+# Solución: parsear el prompt al cargar el módulo, separar el CORE (siempre se
+# manda) de los MODULOS DE PRODUCTO (se inyectan según contexto del mensaje).
+# Reduce el prompt promedio en ~50% sin tocar el contenido — el prompt sigue
+# siendo el mismo source-of-truth en un solo lugar.
+# ════════════════════════════════════════════════════════════════════════════
+
+# Markers: cada módulo arranca con uno de estos substrings y termina cuando
+# arranca el siguiente módulo. El CORE es todo lo que NO está entre módulos
+# (header de identidad, anti-patterns, ejemplos de estilo, city rule, política
+# de privacidad, equivalencias generales — universal).
+_MODULE_MARKERS: dict[str, str] = {
+    "electrodos":    "2. ELECTRODOS:",
+    "caretas":       "3. CARETAS / EQUIPO DE PROTECCIÓN",
+    "microalambre":  "4. MICROALAMBRE / ALAMBRE MIG",
+    "varillas":      "5. VARILLAS",
+    "oxicorte":      "6. OXICORTE / EQUIPO DE GAS",
+    "antorchas":     "7. ANTORCHAS",
+    "boquillas":     "A) BOQUILLA PARA SOLDAR",
+    "mig_difusor":   "PARA MIG (y SOLO MIG)",
+    "sistemas_mig":  "Sistema 1 — MILLER serie 169",
+}
+
+# El módulo termina cuando arranca el siguiente — esto define el orden:
+_MODULE_ORDER = [
+    "electrodos", "caretas", "microalambre", "varillas",
+    "oxicorte", "antorchas", "boquillas", "mig_difusor", "sistemas_mig",
+]
+
+
+def _parse_sumin_modules(prompt: str) -> tuple[str, dict[str, str]]:
+    """Slice SUMIN_SYSTEM into (core, {module_name: text}) at runtime.
+
+    Logic:
+      - For each module marker, find its offset in `prompt`.
+      - Module body = text from marker_offset to next_marker_offset (or end).
+      - CORE = text with all module bodies stitched out + replaced by an empty
+        marker. Importantly we keep the prompt's introductory header and the
+        sections AFTER 'sistemas_mig' (consumibles redirect, zoho notes, discos,
+        equivalencias) because those are universal.
+
+    Returns:
+      core_text:    the slimmed prompt always sent.
+      modules_dict: name → text block (each starts with its marker).
+    """
+    offsets: list[tuple[str, int]] = []
+    for name in _MODULE_ORDER:
+        marker = _MODULE_MARKERS[name]
+        idx = prompt.find(marker)
+        if idx < 0:
+            log_action("PromptRefactor", "marker_not_found",
+                       f"{name}: '{marker[:40]}'")
+            continue
+        offsets.append((name, idx))
+    offsets.sort(key=lambda x: x[1])
+
+    if not offsets:
+        return prompt, {}
+
+    modules: dict[str, str] = {}
+    # The CORE has two parts: BEFORE the first module, and AFTER the last
+    # module (universal sections like consumibles redirect, zoho notes, discos).
+    first_idx = offsets[0][1]
+    core_head = prompt[:first_idx].rstrip() + "\n\n"
+
+    # Each module = [marker_idx, next_marker_idx) — last one ends at the end of
+    # the "sistemas_mig" block which is followed by universal sections.
+    for i, (name, start) in enumerate(offsets):
+        end = offsets[i + 1][1] if i + 1 < len(offsets) else None
+        if end is None:
+            # The last marker is 'sistemas_mig'. The universal tail starts at
+            # the next standalone '═══' divider after sistemas_mig.
+            tail_search = prompt.find("\n═══", start)
+            end = tail_search if tail_search > 0 else len(prompt)
+        modules[name] = prompt[start:end].rstrip() + "\n"
+
+    # CORE tail = everything after the last module's end.
+    last_end = offsets[-1][1]
+    tail_start = prompt.find("\n═══", last_end)
+    if tail_start < 0:
+        tail_start = len(prompt)
+    core_tail = prompt[tail_start:].lstrip("\n")
+
+    core = core_head + core_tail
+    return core, modules
+
+
+_SUMIN_CORE: str = ""
+_SUMIN_MODULES: dict[str, str] = {}
+
+
+def _init_sumin_modules() -> None:
+    """Initialize CORE + MODULES at import time. Idempotent."""
+    global _SUMIN_CORE, _SUMIN_MODULES
+    if _SUMIN_CORE and _SUMIN_MODULES:
+        return
+    core, mods = _parse_sumin_modules(SUMIN_SYSTEM)
+    _SUMIN_CORE = core
+    _SUMIN_MODULES = mods
+    log_action("PromptRefactor", "modules_initialized",
+               f"core={len(core)} chars, modules={len(mods)} "
+               f"({sum(len(v) for v in mods.values())} chars total)")
+
+
+# ─── MODULE SELECTION HEURISTICS ─────────────────────────────────────────────
+# Each module is triggered by substrings appearing in the customer message OR
+# the last 4 messages of history. We intentionally err on the side of INCLUDING
+# more modules — false positives just add tokens; false negatives lose info.
+
+_MODULE_TRIGGERS: dict[str, tuple[str, ...]] = {
+    "electrodos": (
+        "electrodo", "electrodos", "6010", "6011", "6013", "7014", "7018",
+        "7024", "8018", "9018", "11018", "12018", "varilla soldar",
+        "ni-55", "ni55", "ni-99", "ni99", "inconel", "nicrfe",
+        "e308", "e309", "e316", "e310", "e312", "e6010", "e6011", "e7018",
+        "everwear", "hardplus", "hard plus", "chrome carb", "chromecarb",
+        "stick", "tungsteno", "tungsten",
+        "hierro colado", "hierro dulce", "hardfacing",
+    ),
+    "caretas": (
+        "careta", "caretas", "casco", "guante", "guantes", "chaqueta",
+        "chaquetas", "delantal", "delantales", "epp", "protección", "proteccion",
+        "panorámica", "panoramica", "pro 4.0", "pro4.0", "safecut sf",
+        "máscara", "mascara", "escudo", "gorro",
+        "vidrio", "vidrios",
+    ),
+    "microalambre": (
+        "microalambre", "micro alambre", "mig ", " mig", "fluxcore",
+        "flux cored", "fcaw", "gmaw",
+        "er70s", "e71t", "er308l", "er309l", "er316l", "er4043", "er5356",
+        "cobrizado", "cobriz",
+        "0.030", "0.035", "0.045", "0.024", "0.040",
+        "rollo", "rollos", "spool",
+        "33 lbs", "33lbs", "11 lbs", "11lbs", "44 lbs", "44lbs",
+        "0.6 mm", "0.8 mm", "0.9 mm", "1.0 mm", "1.2 mm",
+        "0.6mm", "0.8mm", "0.9mm", "1.0mm", "1.2mm",
+        "chromium", "600 ht", "600ht",
+    ),
+    "varillas": (
+        "varilla", "varillas", "aporte", "soldadura autógena", "autogena",
+        "tig",
+    ),
+    "oxicorte": (
+        "oxicorte", "oxígeno", "oxigeno", "acetileno", "propano", "lpg",
+        "regulador", "reguladores", "manómetro", "manometro", "manómetros",
+        "manometros", "safecut", "victor", "esab cga", "cga",
+        "gas natural", "gas mafe", "mapp",
+    ),
+    "antorchas": (
+        "antorcha", "antorchas", "soplete", "sopletes", "torch",
+        "kit oxicorte", "equipo oxicorte", "set oxicorte",
+        "panasonic", "p80", "hypertherm", "lincoln tomahawk", "hugong", "texas",
+        "miller", "binzel", "magnum",
+    ),
+    "boquillas": (
+        "boquilla", "boquillas", "tip", "tips", "chiflo", "chiflos", "punta",
+        "1-101", "1101", "gpn", "gpn-", "tobera", "toberas",
+        "8-6230", "9-8210", "9-8215",  # plasma parts
+    ),
+    "mig_difusor": (
+        "difusor", "difusores", "capuchón", "capuchon",
+        "tobera mig", "tobera para mig",
+        "169-", "kp2744",
+    ),
+    "sistemas_mig": (
+        "miller serie 169", "magnum 200", "magnum 250", "mdx", "binzel",
+        "serie hd", "m25", "m250",
+    ),
+}
+
+
+def _select_relevant_modules(text: str, history: list | None = None) -> list[str]:
+    """Pick the product modules that match the current turn's context.
+
+    Looks at the customer message + last 4 messages. Returns the module names
+    in canonical order (so the prompt always reads naturally).
+    """
+    if not _SUMIN_MODULES:
+        _init_sumin_modules()
+    history = history or []
+    haystack_parts = [(text or "").lower()]
+    for msg in history[-4:]:
+        c = (msg.get("content") or "")
+        if c:
+            haystack_parts.append(c.lower())
+    haystack = " ".join(haystack_parts)
+
+    selected: list[str] = []
+    for mod_name in _MODULE_ORDER:
+        if mod_name not in _SUMIN_MODULES:
+            continue
+        triggers = _MODULE_TRIGGERS.get(mod_name, ())
+        for trig in triggers:
+            if trig in haystack:
+                selected.append(mod_name)
+                break
+    return selected
+
+
+def _build_sumin_system(text: str, history: list | None = None) -> str:
+    """v30 — build the SUMIN system prompt for the current turn.
+
+    Strategy:
+      - Always include CORE (style + anti-patterns + city rule + privacy +
+        zoho notes + universal equivalencias).
+      - Add only the product modules whose triggers fired (electrodos,
+        caretas, microalambre, etc.).
+      - On EMPTY trigger match (e.g. greeting / off-topic), include nothing —
+        the CORE still has the full identity + style guidelines.
+
+    Returns a string identical in shape to SUMIN_SYSTEM but typically 40-60%
+    shorter per turn. Daniel still maintains a single source-of-truth (the
+    full SUMIN_SYSTEM constant); we just slice at runtime.
+    """
+    if not _SUMIN_MODULES:
+        _init_sumin_modules()
+    # Safety net: if parsing failed for any reason, fall back to the full prompt.
+    if not _SUMIN_CORE or not _SUMIN_MODULES:
+        return SUMIN_SYSTEM
+    modules = _select_relevant_modules(text, history)
+    parts = [_SUMIN_CORE]
+    if modules:
+        parts.append("\n━━━ MÓDULOS RELEVANTES PARA ESTE TURNO ━━━\n")
+        for m in modules:
+            parts.append(_SUMIN_MODULES[m])
+            parts.append("\n")
+    final = "".join(parts)
+    log_action("PromptRefactor", "built_system",
+               f"core={len(_SUMIN_CORE)} mods={len(modules)}/{len(_SUMIN_MODULES)} "
+               f"final={len(final)} (was {len(SUMIN_SYSTEM)})")
+    return final
+
+
 SUMIN_KEYWORDS  = ['soldar', 'soldadura', 'electrodo', 'mig', 'careta', 'guante',
                    'chaqueta', 'alambre', 'oxicorte', 'sumin', 'epp', 'protección',
                    'delantal', 'escudo', 'varilla']
@@ -1438,16 +1680,31 @@ def is_comprobante(image_bytes: bytes, mime_type: str = "image/jpeg") -> bool:
     return msg.content[0].text.strip().upper() == "SI"
 
 def identify_product(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
+    """v30: Opus 4.6 for vision-over-catalog. Para identificar productos en
+    fotos del cliente y cruzar con el SUMIN_SYSTEM (saber si lo manejamos)
+    Opus razona mucho mejor sobre las 10K líneas del prompt."""
     b64 = base64.standard_b64encode(image_bytes).decode()
-    msg = claude.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=300,
-        system=SUMIN_SYSTEM,
-        messages=[{"role": "user", "content": [
-            {"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": b64}},
-            {"type": "text", "text": "Identifica qué producto de soldadura/EPP/oxicorte es este. Dame nombre técnico, especificaciones visibles y si lo manejamos en SUMIN."}
-        ]}]
-    )
+    try:
+        msg = claude.messages.create(
+            model=SALES_BRAIN_MODEL,
+            max_tokens=400,
+            system=SUMIN_SYSTEM,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": b64}},
+                {"type": "text", "text": "Identifica qué producto de soldadura/EPP/oxicorte es este. Dame nombre técnico, especificaciones visibles y si lo manejamos en SUMIN."}
+            ]}]
+        )
+    except Exception as e:
+        log_action("VisionAgent", "opus_fallback_sonnet", str(e)[:200])
+        msg = claude.messages.create(
+            model=SALES_BRAIN_FALLBACK_MODEL,
+            max_tokens=300,
+            system=SUMIN_SYSTEM,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": b64}},
+                {"type": "text", "text": "Identifica qué producto de soldadura/EPP/oxicorte es este. Dame nombre técnico, especificaciones visibles y si lo manejamos en SUMIN."}
+            ]}]
+        )
     return msg.content[0].text
 
 
@@ -1562,37 +1819,62 @@ def bot_asked_city(response: str) -> bool:
     ])
     return (has_both and has_question) or asks_location
 
+SALES_BRAIN_MODEL = "claude-opus-4-6"           # v30: upgrade Sonnet → Opus 4.6
+SALES_BRAIN_FALLBACK_MODEL = "claude-sonnet-4-6"  # si Opus rate-limita
+
+
 def claude_respond(system: str, conversation_history: list, new_message: str) -> str:
-    """v28.2 — main sales agent reply with EXTENDED THINKING.
+    """v30 — main sales agent reply with Opus 4.6 + EXTENDED THINKING.
 
-    Daniel: 'el bot toma decisiones muy rápidas, ocupa más tiempo para pensarlo'.
-    Solución: extended thinking de Sonnet 4.6 — el modelo reflexiona internamente
-    antes de generar la respuesta visible al cliente. Esto:
-      - Detecta correcciones del cliente que el modelo veloz ignoraba
-      - Distingue mejor entre nombre-de-cliente vs descripción-de-producto
-      - Permite que el modelo planee la respuesta antes de "soltarla"
+    v28.2: arrancamos con Sonnet 4.6 + extended thinking porque Daniel reportó
+    que el bot tomaba decisiones muy rápidas e ignoraba correcciones.
 
-    Thinking budget = 4000 tokens (~10s extra). max_tokens debe ser
-    >= budget_tokens + 1024 (Anthropic API requirement).
+    v30 (Daniel: 'auditá v1→v29.5, regresión'): el SUMIN_SYSTEM creció a ~10K
+    tokens (787 líneas, 22 NUNCA, 28 'Si el cliente') y Sonnet no estaba
+    siguiendo todas las reglas correctamente. Upgrade a Opus 4.6 — mejor
+    instruction-following sobre prompts largos, mejor razonamiento en
+    extended thinking, mejor disambiguation (microalambre vs electrodo,
+    corrección vs nombre cliente, etc.).
+
+    Tradeoff: ~5x costo por mensaje, +5-10s latencia. Vale la pena para el
+    canal principal de cotizaciones B2B. Si Opus rate-limita o falla,
+    fallback automático a Sonnet 4.6 (con thinking) y, en última instancia,
+    Sonnet 4.6 sin thinking.
+
+    Thinking budget = 4000 tokens. max_tokens debe ser >= budget + 1024.
     """
     messages = conversation_history[-10:] + [{"role": "user", "content": new_message}]
+    msg = None
+    # 1er intento: Opus 4.6 + extended thinking (best quality)
     try:
         msg = claude.messages.create(
-            model="claude-sonnet-4-6",
+            model=SALES_BRAIN_MODEL,
             max_tokens=5500,            # 4000 thinking + ~1500 output
             thinking={"type": "enabled", "budget_tokens": 4000},
             system=system,
             messages=messages,
         )
+        log_action("Claude", "opus_ok", f"history_len={len(messages)}")
     except Exception as e:
-        # If extended thinking not supported / API error, fall back to non-thinking
-        log_action("Claude", "thinking_fallback", str(e)[:200])
-        msg = claude.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=600,
-            system=system,
-            messages=messages,
-        )
+        # 2do intento: Sonnet 4.6 + extended thinking
+        log_action("Claude", "opus_fallback_sonnet", str(e)[:200])
+        try:
+            msg = claude.messages.create(
+                model=SALES_BRAIN_FALLBACK_MODEL,
+                max_tokens=5500,
+                thinking={"type": "enabled", "budget_tokens": 4000},
+                system=system,
+                messages=messages,
+            )
+        except Exception as e2:
+            # 3er intento: Sonnet 4.6 SIN thinking (último recurso)
+            log_action("Claude", "thinking_fallback", str(e2)[:200])
+            msg = claude.messages.create(
+                model=SALES_BRAIN_FALLBACK_MODEL,
+                max_tokens=600,
+                system=system,
+                messages=messages,
+            )
     # Find the first text block — when thinking is enabled, the response has
     # both ThinkingBlock and TextBlock; we want only the visible text.
     for block in msg.content:
@@ -2423,7 +2705,9 @@ def sales_agent(from_number: str, from_name: str, text: str, state: dict):
     city_ctx = _build_city_context(meta)
     zoho_ctx = zoho_inventory_context(text, history=history)
     mig_ctx = _build_mig_attended_context(meta)
-    system = SUMIN_SYSTEM + city_ctx + zoho_ctx + mig_ctx
+    # v30 Nivel 2: build el prompt slim según el contexto del turno
+    base = _build_sumin_system(text, history)
+    system = base + city_ctx + zoho_ctx + mig_ctx
     response = claude_respond(system, history, text)
 
     # If Claude asked about city in this response, mark it as asked so we don't
@@ -5087,7 +5371,9 @@ def orchestrate(message_data: dict):
             city_ctx = _build_city_context(meta)
             zoho_ctx = zoho_inventory_context(text, history=history)
             mig_ctx = _build_mig_attended_context(meta)
-            system_with_ctx = SUMIN_SYSTEM + city_ctx + zoho_ctx + photo_ctx + mig_ctx
+            # v30 Nivel 2: prompt slim por turno
+            base = _build_sumin_system(text, history)
+            system_with_ctx = base + city_ctx + zoho_ctx + photo_ctx + mig_ctx
             response = claude_respond(system_with_ctx, history, text)
             if not meta.get("ciudad") and bot_asked_city(response):
                 meta["city_asked"] = True
