@@ -1998,13 +1998,184 @@ def _normalize_unit(u: str) -> str:
         return "LB"
     if s in {"UND", "UNID", "UNIDAD", "UNIDADES", "PZA", "PIEZA", "U"}:
         return "UND"
-    if s in {"CAJA", "CJ", "BOX"}:
+    if s in {"CAJA", "CJ", "BOX", "CAJAS"}:
         return "CAJA"
-    if s in {"ROLLO", "ROLL"}:
+    if s in {"ROLLO", "ROLL", "ROLLOS"}:
         return "ROLLO"
-    if s in {"KG", "KILO", "KILOS", "KILOGRAMO"}:
+    if s in {"KG", "KILO", "KILOS", "KILOGRAMO", "KILOGRAMOS"}:
         return "KG"
+    if s in {"MT", "TON", "TONELADA", "TONELADAS", "TONELADA METRICA"}:
+        return "MT"
     return s
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# v30.1 — CONVERSIÓN DE UNIDADES (KG↔LB, CAJA→LB, MT→LB)
+#
+# Daniel reportó (jun-2026, caso Bryan Bonilla / Azunosa, EST-005237):
+# cliente pidió 200/150/20 KG de electrodos, bot rechazó porque catálogo Zoho
+# está en LB. PERO Zoho tiene tablas de conversión GLOBALES (no por SKU):
+#   • 1 KG  = 2.20462 LB
+#   • 1 MT  = 2200 LB (tonelada métrica)
+#   • 1 CAJA = N LB (depende de la presentación: 10 LB típico, 50 LB para
+#                    cajas grandes de electrodo)
+#
+# Estrategia v30.1:
+#   - Cliente pide N KG → cotizar EN KG con rate = base_LB_rate × 2.20462
+#     (NO convertir el quantity; mantener KG en el PDF — es lo que pidió)
+#   - Cliente pide N CAJA de M LB → cotizar EN LB con quantity = N × M
+#     (la caja NO va en el PDF como unidad — va el peso total en LB)
+#   - Excepción "tiza" (144 und/caja): mantener CAJA en el PDF
+#
+# Fuente: cotización manual Daniel EST-005238 — seleccionó "KG" en dropdown
+# Zoho y obtuvo rate 99.2079/KG sobre base 45/LB (× 2.20462 = 99.2079 ✓).
+# ════════════════════════════════════════════════════════════════════════════
+
+# Factor de conversión a LB (unidad base de la mayoría del catálogo SUMIN).
+# 1 [unit] = [factor] LB
+_UNIT_TO_LB: dict[str, float] = {
+    "LB":   1.0,
+    "KG":   2.20462,
+    "MT":   2200.0,           # 1 tonelada métrica = 1000 KG × 2.20462 = 2204.62
+                              # Zoho UI muestra 2200 — usar 2200 para match con UI
+}
+
+# Conversión inversa: 1 LB = [factor] [unit]
+_LB_TO_UNIT: dict[str, float] = {
+    "LB":   1.0,
+    "KG":   1.0 / 2.20462,    # 1 LB = 0.4536 KG
+    "MT":   1.0 / 2200.0,
+}
+
+# Cajas estándar SUMIN: cuántas libras viene cada caja según producto.
+# Cliente que pide "3 cajas de E7018 1/8" generalmente refiere caja de 50 LB
+# para electrodos comunes (6010/6013/7018/7024) y caja de 10 LB para
+# variantes más pequeñas. Si el query menciona el peso explícito
+# ("3 cajas de 10 lbs"), usar ese — esto es solo fallback.
+_DEFAULT_BOX_WEIGHTS_LB: dict[str, float] = {
+    # Electrodos comunes (acero al carbón): caja típica 50 LB
+    "6010": 50.0,
+    "6011": 50.0,
+    "6013": 50.0,
+    "7014": 50.0,
+    "7018": 50.0,
+    "7024": 50.0,
+    # Electrodos inox / hardfacing / especiales: caja típica 10 LB
+    "e308": 10.0,
+    "e309": 10.0,
+    "e316": 10.0,
+    "e312": 10.0,
+    "ni-55": 10.0,
+    "ni55":  10.0,
+    "ni-99": 10.0,
+    "ni99":  10.0,
+    "everwear": 10.0,
+    "hardplus": 10.0,
+    "hard plus": 10.0,
+}
+
+# Excepciones: productos donde la unidad CAJA es la unidad base real (NO
+# convertir a LB). Por ahora: tiza (144 und/caja).
+_BOX_IS_BASE_UNIT_KEYWORDS = (
+    "tiza", "chalk",
+)
+
+
+def _detect_box_weight_lb(product_name: str) -> float | None:
+    """v30.1: extraer peso de caja del nombre del producto, o adivinar desde
+    el alloy. Retorna None si no detectó nada confiable.
+
+    Ejemplos:
+      'electrodo 7018 1/8 50 lbs'   → 50.0
+      '3 cajas de 10 lbs de 6011'   → 10.0
+      'electrodo 6011 1/8'          → 50.0 (default para 6011)
+      'tiza para soldar'            → None  (caja es unidad base)
+      'careta básica'               → None
+    """
+    if not product_name:
+        return None
+    pname = product_name.lower()
+
+    # Excepción: si producto va en CAJA como unidad base, no convertir
+    for kw in _BOX_IS_BASE_UNIT_KEYWORDS:
+        if kw in pname:
+            return None
+
+    # 1) Peso explícito en el nombre ("50 lbs", "10 lbs", "33 lb")
+    m = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:lbs?|libras?)\b", pname, re.IGNORECASE)
+    if m:
+        try:
+            w = float(m.group(1))
+            if 1 <= w <= 100:    # sanity check
+                return w
+        except ValueError:
+            pass
+
+    # 2) Default por alloy detectado en el nombre
+    for kw, w in _DEFAULT_BOX_WEIGHTS_LB.items():
+        if kw in pname:
+            return w
+
+    return None
+
+
+def _convert_units(
+    quantity: float,
+    requested_unit: str,
+    catalog_unit: str,
+    catalog_rate: float,
+    product_name: str = "",
+) -> tuple[float, float, str, str] | None:
+    """v30.1: Convertir cantidad+rate entre unidad pedida y unidad del catálogo.
+
+    Devuelve (qty_final, rate_final, unit_final, note) o None si imposible.
+
+    Reglas:
+      - Si requested_unit == catalog_unit → devolver tal cual
+      - LB ↔ KG ↔ MT: cotizar EN la unidad pedida (Daniel: 'bot cotiza en
+        la unidad que pide el cliente'). Rate se ajusta usando _UNIT_TO_LB.
+      - CAJA → LB: cotizar EN LB con quantity = N × peso_caja
+        (Daniel: 'no se pone unidades caja… se pone treinta libras')
+        Excepción: tiza/chalk → mantener CAJA como unidad.
+
+    Returns:
+      (qty_final, rate_final, unit_final, note)
+      Donde note describe la conversión aplicada para log/transparencia.
+    """
+    rq  = _normalize_unit(requested_unit)
+    cu  = _normalize_unit(catalog_unit)
+
+    # Misma unidad — no hay conversión
+    if rq == cu:
+        return (quantity, catalog_rate, cu, "")
+
+    # CAJA → LB (caso más común para electrodos)
+    if rq == "CAJA" and cu == "LB":
+        box_lb = _detect_box_weight_lb(product_name)
+        if box_lb is None:
+            # Producto exception (tiza) o no detectamos: NO convertir
+            return None
+        new_qty  = quantity * box_lb
+        new_rate = catalog_rate    # rate POR LB se mantiene
+        note     = f"{int(quantity)} caja(s) de {int(box_lb)} lbs → {new_qty:g} LB"
+        return (new_qty, new_rate, "LB", note)
+
+    # LB → CAJA (raro pero posible)
+    if rq == "LB" and cu == "CAJA":
+        # No common case for SUMIN; reject
+        return None
+
+    # KG ↔ LB (Daniel: rate × 2.20462 cuando catálogo LB y cliente pide KG)
+    if rq in _UNIT_TO_LB and cu in _UNIT_TO_LB:
+        # Convertir el rate al rate POR la unidad pedida
+        # rate_per_kg = rate_per_lb × (LB por KG) = rate_per_lb × 2.20462
+        rate_per_lb = catalog_rate / _UNIT_TO_LB.get(cu, 1.0)
+        new_rate    = rate_per_lb * _UNIT_TO_LB.get(rq, 1.0)
+        note        = f"convertido {cu}→{rq} (factor {_UNIT_TO_LB[rq] / _UNIT_TO_LB[cu]:.5f})"
+        return (quantity, round(new_rate, 4), rq, note)
+
+    # Otras conversiones no soportadas
+    return None
 
 
 _QUERY_STOPWORDS = {
@@ -4673,18 +4844,29 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                     zoho_item = zoho_search_item_for_quote(req["product"], requested_unit=req_unit)
                     if zoho_item and zoho_item.get("item_id"):
                         z_unit = _normalize_unit(zoho_item.get("unit", ""))
+                        # v30.1: try unit conversion before rejecting
+                        final_qty  = float(req.get("quantity", 1) or 1)
+                        final_unit = z_unit
+                        final_rate = float(zoho_item.get("rate", 0) or 0)
                         if req_unit and z_unit and req_unit != z_unit:
-                            added_unit_mm.append(req["product"])
-                            continue
+                            conv = _convert_units(
+                                quantity=final_qty, requested_unit=req_unit,
+                                catalog_unit=z_unit, catalog_rate=final_rate,
+                                product_name=req["product"],
+                            )
+                            if conv is None:
+                                added_unit_mm.append(req["product"])
+                                continue
+                            final_qty, final_rate, final_unit, _ = conv
                         pending["items"].append({
                             "item_id":  zoho_item["item_id"],
                             "name":     zoho_item.get("item_name", req["product"]),
-                            "quantity": req.get("quantity", 1),
-                            "rate":     float(zoho_item.get("rate", 0) or 0),
-                            "unit":     zoho_item.get("unit", "UND"),
+                            "quantity": final_qty,
+                            "rate":     final_rate,
+                            "unit":     final_unit or "UND",
                         })
                         added_summary.append(
-                            f"{req.get('quantity', 1):g} {z_unit or 'UND'} {zoho_item.get('item_name','')[:40]}"
+                            f"{final_qty:g} {final_unit or 'UND'} {zoho_item.get('item_name','')[:40]}"
                         )
                     else:
                         added_not_found.append(req["product"])
@@ -4806,11 +4988,36 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                                f"req_unit={req_unit} matched='{zoho_item.get('name','')[:60]}'")
             if zoho_item and zoho_item.get("item_id"):
                 matched_unit = _normalize_unit(zoho_item.get("unit", ""))
+
+                # v30.1 BUG FIX (jun-2026, caso Azunosa EST-005237): cliente
+                # pidió 200/150/20 KG de electrodos, bot rechazaba con
+                # "unit_mismatch" porque catálogo en LB. PERO Zoho tiene
+                # conversión global LB↔KG↔MT (2.20462) y CAJA→LB por peso.
+                # En vez de rechazar: convertir cantidad+rate y cotizar en
+                # la unidad pedida por el cliente.
+                final_qty  = max(1.0, float(req.get("quantity", 1)))
+                final_unit = matched_unit
+                final_rate = float(zoho_item.get("rate") or 0)
+                conversion_note = ""
+
                 if req_unit and matched_unit and req_unit != matched_unit:
-                    unit_mismatches.append(
-                        f"{req['product']} (pidió {req_unit}, en catálogo solo hay {matched_unit})"
+                    conv = _convert_units(
+                        quantity       = final_qty,
+                        requested_unit = req_unit,
+                        catalog_unit   = matched_unit,
+                        catalog_rate   = final_rate,
+                        product_name   = req["product"],
                     )
-                    continue
+                    if conv is None:
+                        # No hay conversión válida (ej. CAJA→LB para tiza)
+                        unit_mismatches.append(
+                            f"{req['product']} (pidió {req_unit}, en catálogo solo hay {matched_unit})"
+                        )
+                        continue
+                    final_qty, final_rate, final_unit, conversion_note = conv
+                    log_action("QuoteAgent", "unit_converted",
+                               f"{req['product'][:40]}: {req.get('quantity',1)} {req_unit} → "
+                               f"{final_qty:g} {final_unit} @ L{final_rate:.4f} ({conversion_note})")
 
                 # v29.3 BUG FIX (jun-2026): Daniel reportó cotización EST-005149
                 # donde cliente pidió ER4043 TIG 1/16 y el bot matcheó al
@@ -4831,8 +5038,7 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                 # Estos items NO deben entrar en el PDF formal — el cliente
                 # recibe cotización con totales bajos/inválidos. Excluir y
                 # marcar como "precio por confirmar".
-                rate = float(zoho_item.get("rate") or 0)
-                if rate <= 0:
+                if final_rate <= 0:
                     needs_price.append({
                         **zoho_item,
                         "quantity": max(1, int(req.get("quantity", 1))),
@@ -4842,8 +5048,15 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                                f"sku={zoho_item.get('sku','?')} name={zoho_item.get('name','')[:50]}")
                     continue
 
-                line_items.append({**zoho_item,
-                                   "quantity": max(1, int(req.get("quantity", 1)))})
+                # v30.1: usar quantity/rate/unit POST-conversión (no los raw
+                # del zoho_item) para que el PDF muestre KG cuando cliente pidió KG.
+                line_items.append({
+                    **zoho_item,
+                    "quantity": final_qty,
+                    "rate":     final_rate,
+                    "unit":     final_unit,
+                    "conversion_note": conversion_note,
+                })
             else:
                 # v29.6: antes de declarar "no encontrado", intentar soft-match
                 # de presentaciones — si el cliente pidió 10 lbs y solo existe en
