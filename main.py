@@ -36,6 +36,9 @@ def forward_to_console(
     For image/audio/document messages, pass `wa_media_id` + `media_mime` so the
     console can lazy-fetch the binary later via /api/messages/{id}/media.
     """
+    # v30.2: test mode → no ensuciar la bandeja del console con chats de backtest.
+    if _is_test_mode():
+        return
     if not CONSOLE_API_URL or not INTERNAL_API_TOKEN:
         return
     try:
@@ -143,6 +146,10 @@ def submit_pending_quote_to_console(
     notes: str | None = None,
 ) -> bool:
     """POST a pending-approval quote to the console. Returns True on success."""
+    # v30.2: test mode → simular éxito sin tocar el console.
+    if _is_test_mode():
+        log_action("Console", "pending_quote_dryrun", "[TEST_MODE] no enviado al console")
+        return True
     if not CONSOLE_API_URL or not INTERNAL_API_TOKEN:
         return False
     payload = {
@@ -1560,6 +1567,11 @@ def wa_send(to: str, text: str):
     return r.json()
 
 def wa_send_image_url(to: str, url: str, caption: str = ""):
+    # v30.2: test mode → capturar en vez de mandar por WhatsApp.
+    if _is_test_mode():
+        _TEST_STATE.capture.append({"to": to, "text": f"[IMAGEN: {url}] {caption}".strip()})
+        log_action("WA_SEND", f"image→{to} [TEST_MODE]", url[:80])
+        return {"test_mode": True}
     wa_url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {WA_TOKEN}", "Content-Type": "application/json"}
     body = {
@@ -1573,6 +1585,10 @@ def wa_send_image_url(to: str, url: str, caption: str = ""):
     return r.json()
 
 def wa_forward_image(media_id: str, to: str):
+    # v30.2: test mode → capturar en vez de mandar por WhatsApp.
+    if _is_test_mode():
+        _TEST_STATE.capture.append({"to": to, "text": f"[IMAGEN reenviada: {media_id}]"})
+        return {"test_mode": True}
     url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {WA_TOKEN}", "Content-Type": "application/json"}
     body = {"messaging_product": "whatsapp", "to": to, "type": "image", "image": {"id": media_id}}
@@ -1845,17 +1861,24 @@ def claude_respond(system: str, conversation_history: list, new_message: str) ->
     """
     messages = conversation_history[-10:] + [{"role": "user", "content": new_message}]
     msg = None
-    # 1er intento: Opus 4.6 + extended thinking (best quality)
+    # v30.2: override de modelo para backtesting (solo se setea vía /debug/chat).
+    _model_override = getattr(_TEST_STATE, "model_override", None)
+    brain_model = _model_override or SALES_BRAIN_MODEL
+    # 1er intento: cerebro principal + extended thinking (best quality)
     try:
         msg = claude.messages.create(
-            model=SALES_BRAIN_MODEL,
+            model=brain_model,
             max_tokens=5500,            # 4000 thinking + ~1500 output
             thinking={"type": "enabled", "budget_tokens": 4000},
             system=system,
             messages=messages,
         )
-        log_action("Claude", "opus_ok", f"history_len={len(messages)}")
+        log_action("Claude", f"brain_ok:{brain_model}", f"history_len={len(messages)}")
     except Exception as e:
+        # Backtest: con override NO hay fallback — el error debe quedar visible
+        # para no contaminar la comparación entre modelos.
+        if _model_override:
+            raise
         # 2do intento: Sonnet 4.6 + extended thinking
         log_action("Claude", "opus_fallback_sonnet", str(e)[:200])
         try:
@@ -4380,6 +4403,21 @@ def zoho_create_estimate(customer_name: str, customer_phone: str, line_items: li
     quote still gets created with the org default — never block the sale on
     a template config issue.
     """
+    # v30.2: en test mode (backtest/debug) NO tocamos Zoho — dry-run que simula
+    # el estimate y captura los line_items para evaluación del harness.
+    if _is_test_mode():
+        total = round(sum((li.get("rate") or 0) * (li.get("quantity") or 0)
+                          for li in line_items) * 1.15, 2)
+        if getattr(_TEST_STATE, "estimates", None) is not None:
+            _TEST_STATE.estimates.append({
+                "customer_name": customer_name, "phone": customer_phone,
+                "line_items": line_items, "total": total,
+            })
+        log_action("ZohoAPI", "estimate_dryrun",
+                   f"[TEST_MODE] {len(line_items)} items total=L{total:,.2f}")
+        return {"estimate_id": f"TEST-{int(time.time() * 1000)}",
+                "estimate_number": "TEST-DRYRUN", "total": total,
+                "customer_id": "", "line_items": line_items}
     token = get_zoho_access_token()
     if not token or not ZOHO_ORG_ID:
         return None
@@ -4438,6 +4476,13 @@ def zoho_update_estimate(estimate_id: str, customer_id: str, line_items: list[di
     """Update an existing Zoho estimate's line_items. Returns the updated estimate
     on success, None on failure. Used by the post-quote confirmation flow when a
     trusted user corrects the items before final delivery."""
+    # v30.2: dry-run en test mode (ver zoho_create_estimate).
+    if _is_test_mode():
+        log_action("ZohoAPI", "estimate_update_dryrun", f"[TEST_MODE] {estimate_id}")
+        return {"estimate_id": estimate_id, "estimate_number": "TEST-DRYRUN",
+                "total": round(sum((li.get("rate") or 0) * (li.get("quantity") or 0)
+                                   for li in line_items) * 1.15, 2),
+                "customer_id": customer_id, "line_items": line_items}
     token = get_zoho_access_token()
     if not token or not ZOHO_ORG_ID or not estimate_id:
         return None
@@ -4507,6 +4552,11 @@ def wa_upload_media(file_bytes: bytes, mime_type: str, filename: str) -> str | N
 
 
 def wa_send_document(to: str, file_bytes: bytes, filename: str, caption: str = ""):
+    # v30.2: test mode → capturar en vez de subir/mandar por WhatsApp.
+    if _is_test_mode():
+        _TEST_STATE.capture.append({"to": to, "text": f"[DOCUMENTO: {filename}] {caption}".strip()})
+        log_action("WA_SEND", f"doc→{to} [TEST_MODE]", filename)
+        return {"test_mode": True}
     media_id = wa_upload_media(file_bytes, "application/pdf", filename)
     if not media_id:
         log_action("WA_SEND", "doc_upload_failed", filename)
@@ -5940,29 +5990,41 @@ async def debug_chat(request: Request):
             "mime_type": body.get("mime_type", "image/jpeg"),
         }
 
-    # Enter test mode: capture wa_send instead of calling WhatsApp
+    # Enter test mode: capture wa_send instead of calling WhatsApp.
+    # v30.2: "model" en el body → override del cerebro (backtesting);
+    # _TEST_STATE.estimates captura los line_items de cotizaciones dry-run.
     _TEST_STATE.capture = []
+    _TEST_STATE.estimates = []
+    _TEST_STATE.model_override = (body.get("model") or "").strip() or None
     try:
         # Patch the 10-second sleep at start of orchestrate (only if sleep_first=False)
         # by monkey-patching time.sleep just for this call
-        if not sleep_first:
-            real_sleep = time.sleep
-            time.sleep = lambda *a, **k: None
-            try:
+        try:
+            if not sleep_first:
+                real_sleep = time.sleep
+                time.sleep = lambda *a, **k: None
+                try:
+                    orchestrate(message_data)
+                finally:
+                    time.sleep = real_sleep
+            else:
                 orchestrate(message_data)
-            finally:
-                time.sleep = real_sleep
-        else:
-            orchestrate(message_data)
+        except Exception as exc:
+            _TEST_STATE.capture.append({"to": phone, "text": f"[ERROR] {exc}"})
         captured = list(_TEST_STATE.capture)
+        captured_estimates = list(_TEST_STATE.estimates)
     finally:
         _TEST_STATE.capture = None
+        _TEST_STATE.estimates = None
+        _TEST_STATE.model_override = None
 
     return {
         "phone": phone,
         "input": text,
+        "model": (body.get("model") or "").strip() or SALES_BRAIN_MODEL,
         "replies": captured,
         "n_replies": len(captured),
+        "estimates": captured_estimates,
     }
 
 
@@ -6001,16 +6063,23 @@ async def debug_chat_bulk(request: Request):
                 "type": "text", "text": {"body": text},
                 "id": f"bulk-{q.get('id','x')}-{int(time.time()*1000)}",
             }
+            model_override = (q.get("model") or body.get("model") or "").strip() or None
             _TEST_STATE.capture = []
+            _TEST_STATE.estimates = []
+            _TEST_STATE.model_override = model_override
             try:
                 orchestrate(message_data)
                 captured = list(_TEST_STATE.capture)
             except Exception as exc:
                 captured = [{"to": phone, "text": f"[ERROR] {exc}"}]
             finally:
+                captured_estimates = list(getattr(_TEST_STATE, "estimates", None) or [])
                 _TEST_STATE.capture = None
+                _TEST_STATE.estimates = None
+                _TEST_STATE.model_override = None
             results.append({"id": q.get("id"), "phone": phone, "input": text,
-                            "replies": captured})
+                            "model": model_override or SALES_BRAIN_MODEL,
+                            "replies": captured, "estimates": captured_estimates})
     finally:
         time.sleep = real_sleep
 
