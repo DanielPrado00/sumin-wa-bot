@@ -549,7 +549,7 @@ check("keywords: 'valoración' dispara",
 _orig = (main.fetch_zoho_catalog, main.match_product_to_catalog, main._item_purchase_history)
 main.fetch_zoho_catalog = lambda: [{"item_id": "X1", "item_name": 'MICROALAMBRE E71T-GS 0.030" 10 LBS', "rate": 1045.44, "unit": "ROLLO", "stock_on_hand": 797}]
 main.match_product_to_catalog = lambda q, c, requested_unit="": c[0]
-main._item_purchase_history = lambda item_id, max_entries=3, max_bills=30: [
+main._item_purchase_history = lambda item_id, max_entries=3, max_bills=30, vendor_name="": [
     {"date": "2026-09-14", "vendor": "Inwelt", "qty": 500, "rate": 27.8, "currency": "USD", "bill_number": "BILL-0012"},
     {"date": "2026-06-02", "vendor": "Inwelt", "qty": 300, "rate": 26.5, "currency": "USD", "bill_number": "BILL-0007"},
 ]
@@ -584,7 +584,7 @@ try:
          {"product": "maneral oxicorte safecut", "quantity": 1, "unit": ""}], "")
     main.match_product_to_catalog = lambda q, c, requested_unit="": (
         _cat2[0] if "460" in q else _cat2[1])
-    main._item_purchase_history = lambda item_id, max_entries=3, max_bills=30: []
+    main._item_purchase_history = lambda item_id, max_entries=3, max_bills=30, vendor_name="": []
     main._TEST_STATE.capture = []
     ok3 = main.cost_agent("50497041381", "cual es el costo de la antorcha CA-460 y el maneral safecut", _state_c)
     _msg3 = main._TEST_STATE.capture[-1]["text"] if main._TEST_STATE.capture else ""

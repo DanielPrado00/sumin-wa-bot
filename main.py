@@ -5966,28 +5966,38 @@ _BILL_CACHE: dict = {"list": None, "expires": 0.0, "details": {}}
 
 
 def _item_purchase_history(item_id: str, max_entries: int = 3,
-                           max_bills: int = 30) -> list[dict]:
+                           max_bills: int = 30, vendor_name: str = "") -> list[dict]:
     """Últimas entradas (compras) de un item, escaneando las facturas de
-    compra más recientes. Detalles de bill cacheados (son inmutables)."""
+    compra más recientes. v30.11: si el item tiene proveedor asignado en
+    Zoho, se buscan las facturas DE ESE PROVEEDOR (los items importados —
+    SafeCut, Inwelt — tienen bills más viejas que las últimas 30 compras
+    locales y no aparecían). Detalles de bill cacheados (son inmutables)."""
     token = get_zoho_access_token()
     if not token or not ZOHO_ORG_ID or not item_id:
         return []
     headers = {"Authorization": f"Zoho-oauthtoken {token}"}
     now = time.time()
-    if _BILL_CACHE["list"] is None or now > _BILL_CACHE["expires"]:
+    cache_key = f"list::{(vendor_name or '').strip().lower()}"
+    cached = _BILL_CACHE.get(cache_key)
+    if cached is None or now > cached.get("expires", 0):
+        params = {"organization_id": ZOHO_ORG_ID, "per_page": max_bills}
+        if vendor_name:
+            params["search_text"] = vendor_name[:100]
         try:
             r = httpx.get("https://www.zohoapis.com/books/v3/bills",
-                          params={"organization_id": ZOHO_ORG_ID, "per_page": max_bills},
-                          headers=headers, timeout=12)
+                          params=params, headers=headers, timeout=12)
             bills = r.json().get("bills", []) if r.status_code == 200 else []
         except Exception as e:
             log_action("ZohoAPI", "bills_list_error", str(e))
             bills = []
+        # Fallback: búsqueda por proveedor sin resultados → lista global
+        if vendor_name and not bills:
+            return _item_purchase_history(item_id, max_entries, max_bills, "")
         bills.sort(key=lambda b: b.get("date", ""), reverse=True)
-        _BILL_CACHE["list"] = bills
-        _BILL_CACHE["expires"] = now + 1800
+        cached = {"bills": bills, "expires": now + 1800}
+        _BILL_CACHE[cache_key] = cached
     out = []
-    for b in _BILL_CACHE["list"][:max_bills]:
+    for b in cached["bills"][:max_bills]:
         bid = b.get("bill_id", "")
         det = _BILL_CACHE["details"].get(bid)
         if det is None:
@@ -6011,6 +6021,9 @@ def _item_purchase_history(item_id: str, max_entries: int = 3,
                 })
         if len(out) >= max_entries:
             break
+    # El proveedor tenía bills pero el item no apareció → intentar global
+    if not out and vendor_name:
+        return _item_purchase_history(item_id, max_entries, max_bills, "")
     return out[:max_entries]
 
 
@@ -6078,7 +6091,8 @@ def cost_agent(from_number: str, text: str, state: dict) -> bool:
         if not item:
             not_found.append(prod)
             continue
-        hist = _item_purchase_history(item.get("item_id", ""))
+        hist = _item_purchase_history(item.get("item_id", ""),
+                                      vendor_name=item.get("vendor_name", "") or "")
         name  = item.get("item_name", "")
         stock = item.get("stock_on_hand", "")
         venta = float(item.get("rate") or 0)
