@@ -2901,7 +2901,7 @@ def sales_agent(from_number: str, from_name: str, text: str, state: dict):
     mig_ctx = _build_mig_attended_context(meta)
     # v30 Nivel 2: build el prompt slim según el contexto del turno
     base = _build_sumin_system(text, history)
-    system = base + city_ctx + zoho_ctx + mig_ctx
+    system = base + city_ctx + zoho_ctx + mig_ctx + _build_internal_assistant_context(from_number)
     response = claude_respond(system, history, text)
 
     # If Claude asked about city in this response, mark it as asked so we don't
@@ -2916,6 +2916,25 @@ def sales_agent(from_number: str, from_name: str, text: str, state: dict):
     wa_send(from_number, response)
     log_action("SalesAgent", "sent_response", response[:100])
     save_state(state)
+
+def _build_internal_assistant_context(from_number: str) -> str:
+    """v30.3: módulo de prompt para números trusted (Daniel y equipo SUMIN).
+    El bot deja de tratarlos como clientes y actúa como asistente interno."""
+    if not is_trusted_number(from_number):
+        return ""
+    return (
+        "\n\n## MODO ASISTENTE INTERNO (número trusted de SUMIN)\n"
+        "Estás hablando con Daniel o personal interno de SUMIN, NO con un cliente. "
+        "Él suele estar atendiendo a un cliente en paralelo por otro canal y te usa "
+        "de asistente rápido.\n"
+        "- Respondé DIRECTO y corto: el dato primero (precio, stock, tarifa, equivalencia). "
+        "Sin saludos de cliente, sin '¿en qué puedo ayudarle?', sin ofrecer 'proceder con el pedido'.\n"
+        "- Puede pedir cotizaciones a nombre de terceros: 'a nombre de X', 'consumidor final', "
+        "'para la empresa Y'. El nombre puede CAMBIAR entre cotizaciones — usá siempre el último "
+        "que indique para esa cotización, sin cuestionarlo.\n"
+        "- No apliques el flujo de preguntar ciudad ni el patrón saludo-aparte: es tráfico interno.\n"
+    )
+
 
 def _build_mig_attended_context(meta: dict) -> str:
     """If this conversation already had its MIG handoff resolved (Daniel
@@ -5473,8 +5492,209 @@ def _try_consume_mig_handoff(from_number: str, text: str, state: dict) -> bool:
         return False
 
 
+# ─── FLETE EXPRECO (v30.3) ───────────────────────────────────────────────────
+# Tarifario de Expreco en data/expreco_rates.json (generado del Excel CXCPRECIOS
+# que manda Expreco). Tipo 1: valor_base cubre peso_base_lbs y cada libra extra
+# cuesta valor_exceso_lb. Tipo 3: valor_fijo (tarifa plana). Montos ANTES de ISV.
+# Origen default: SAN PEDRO SULA; TEGUCIGALPA solo si el mensaje lo dice
+# explícitamente como salida ("desde Tegucigalpa", "el de Tegucigalpa").
+# Encomienda default: CAJA.
+
+_EXPRECO_RATES: list | None = None
+_FLETE_STOPWORDS = {"LA", "EL", "DE", "DEL", "LOS", "LAS", "SAN", "STA", "SANTA", "ALDEA"}
+_FLETE_KEYWORD_RE = re.compile(
+    r"\b(env[ií]os?|env[ií]a[nr]?|flete|enviar|mandar|mandan|encomienda)\b", re.IGNORECASE)
+_FLETE_WEIGHT_RE = re.compile(
+    r"(\d+(?:[.,]\d+)?)\s*(libras?|lbs?|lb|kilos?|kilogramos?|kgs?|kg)\b", re.IGNORECASE)
+_FLETE_ORIGEN_TGU_RE = re.compile(
+    r"\b(desde|salida\s+de?|saliendo\s+de|sale\s+de)\s+(tegucigalpa|tgu|teguz)\b"
+    r"|\bel\s+de\s+tegucigalpa\b", re.IGNORECASE)
+_ADD_FLETE_RE = re.compile(
+    r"\bagreg\w*\b[^\n]*\bflete\b|\bflete\b[^\n]*\bagreg\w*\b"
+    r"|\bsum[aá]\w*\b[^\n]*\bflete\b|\bmet[eé]\w*\b[^\n]*\bflete\b", re.IGNORECASE)
+
+
+def _flete_norm(s: str) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFD", s or "")
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^A-Z0-9]+", " ", s.upper()).strip()
+
+
+def _load_expreco_rates() -> list:
+    global _EXPRECO_RATES
+    if _EXPRECO_RATES is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "data", "expreco_rates.json")
+        try:
+            with open(path, encoding="utf-8") as f:
+                _EXPRECO_RATES = json.load(f)
+        except Exception as e:
+            log_action("Flete", "rates_load_error", str(e))
+            _EXPRECO_RATES = []
+    return _EXPRECO_RATES
+
+
+def _expreco_match_destino(text: str, origen: str):
+    """Devuelve (fila única | None, candidatos ambiguos). Solo filas CAJA."""
+    tnorm = " " + _flete_norm(text) + " "
+    ttokens = set(tnorm.split())
+    best, best_key = [], (0.0, 0)
+    for r in _load_expreco_rates():
+        if r["origen"] != origen or r["encomienda"] != "CAJA":
+            continue
+        dn = _flete_norm(r["destino"])
+        dtokens = [t for t in dn.split() if t]
+        matched = [t for t in dtokens if t in ttokens]
+        # exigir al menos un token "fuerte" (no stopword) presente
+        if not any(t not in _FLETE_STOPWORDS and len(t) >= 3 for t in matched):
+            continue
+        score = len(matched) / len(dtokens)
+        if f" {dn} " in tnorm:
+            score = 1.0 + len(dn) / 100.0  # substring completo gana; más largo mejor
+        if score < 0.6:
+            continue
+        key = (score, len(dn))
+        if key > best_key:
+            best_key, best = key, [r]
+        elif key == best_key:
+            best.append(r)
+    if len(best) == 1:
+        return best[0], []
+    if len(best) > 1:
+        return None, [b["destino"].title() for b in best[:4]]
+    return None, []
+
+
+def _detect_flete_query(text: str) -> dict | None:
+    """Detecta pregunta de flete: keyword de envío + destino del tarifario."""
+    if not text or not _FLETE_KEYWORD_RE.search(text):
+        return None
+    origen = "TEGUCIGALPA" if _FLETE_ORIGEN_TGU_RE.search(text) else "SAN PEDRO SULA"
+    row, candidates = _expreco_match_destino(text, origen)
+    if row is None and not candidates:
+        return None
+    peso = None
+    peso_original = ""
+    m = _FLETE_WEIGHT_RE.search(text)
+    if m:
+        peso = float(m.group(1).replace(",", "."))
+        if m.group(2).lower().startswith(("k",)):
+            peso_original = f"{m.group(1)} kg"
+            peso = round(peso * 2.20462, 1)
+    return {"row": row, "candidates": candidates, "peso_lbs": peso,
+            "peso_original": peso_original, "origen": origen}
+
+
+def calcular_flete(row: dict, peso_lbs: float | None, peso_original: str = "") -> dict:
+    """Arma el cálculo y el mensaje. total=None cuando falta el peso (tipo 1)."""
+    header = f"🚚 Flete Expreco {row['origen'].title()} → {row['destino'].title()} (caja)"
+    if row["tipo"] == 3:
+        total = row["valor_fijo"]
+        return {"total": total,
+                "mensaje": f"{header}\nTarifa fija: *L{total:,.2f}* (antes de ISV)"}
+    base, pb, exc = row["valor_base"], row["peso_base_lbs"], row["valor_exceso_lb"]
+    if peso_lbs is None:
+        return {"total": None,
+                "mensaje": (f"{header}\nBase (hasta {pb:g} lbs): L{base:,.2f} + "
+                            f"L{exc:,.2f} por libra adicional.\n"
+                            f"¿Cuántas libras pesa el envío?")}
+    extra_lbs = max(0.0, peso_lbs - pb)
+    total = round(base + extra_lbs * exc, 2)
+    peso_txt = f"{peso_original} ≈ {peso_lbs:g} lbs" if peso_original else f"{peso_lbs:g} lbs"
+    lines = [header, f"Peso: {peso_txt}", f"Base (hasta {pb:g} lbs): L{base:,.2f}"]
+    if extra_lbs > 0:
+        lines.append(f"Exceso: {extra_lbs:g} lbs × L{exc:,.2f} = L{extra_lbs * exc:,.2f}")
+    lines.append(f"*Total: L{total:,.2f}* (antes de ISV)")
+    return {"total": total, "mensaje": "\n".join(lines)}
+
+
+def _find_flete_zoho_item() -> dict | None:
+    for it in fetch_zoho_catalog():
+        if "FLETE" in (it.get("item_name") or "").upper():
+            return it
+    return None
+
+
+def flete_agent(from_number: str, text: str, state: dict) -> bool:
+    """Responde preguntas de flete Expreco de forma determinística (sin LLM).
+    Corre ANTES de los flows pendientes para que una pregunta de envío no sea
+    tragada por la captura de nombre de cliente. Devuelve True si respondió."""
+    q = _detect_flete_query(text)
+    if not q:
+        return False
+    meta = get_conv_meta(state, from_number)
+    if q["row"] is None:
+        wa_send(from_number,
+                "Para el flete encontré varios destinos posibles: "
+                + ", ".join(q["candidates"]) + ". ¿Cuál es?")
+        log_action("Flete", "ambiguous", ", ".join(q["candidates"]))
+        return True
+    calc = calcular_flete(q["row"], q["peso_lbs"], q["peso_original"])
+    msg = calc["mensaje"]
+    pc = meta.get("pending_confirmation")
+    if calc["total"] is not None:
+        meta["last_flete"] = {
+            "destino": q["row"]["destino"], "origen": q["row"]["origen"],
+            "total": calc["total"], "at": datetime.now().isoformat(),
+        }
+        if pc and not _confirmation_expired(pc):
+            msg += (f"\n\nSi querés lo agrego a la cotización "
+                    f"#{pc['estimate_number']}: respondé *agregar flete*.")
+    wa_send(from_number, msg)
+    log_action("Flete", "answered",
+               f"{q['row']['origen']}→{q['row']['destino']} peso={q['peso_lbs']} total={calc['total']}")
+    if from_number not in state["conversations"]:
+        state["conversations"][from_number] = []
+    history = state["conversations"][from_number]
+    history.append({"role": "user", "content": text})
+    history.append({"role": "assistant", "content": msg})
+    state["conversations"][from_number] = history[-20:]
+    save_state(state)
+    return True
+
+
+def _try_add_flete_to_pending(from_number: str, text: str, state: dict) -> bool:
+    """'agregar flete' → mete el último flete calculado como línea FLETE DE
+    MERCADERIA en la cotización pendiente de confirmación y regenera el PDF."""
+    if not text or not _ADD_FLETE_RE.search(text):
+        return False
+    meta = get_conv_meta(state, from_number)
+    lf = meta.get("last_flete") or {}
+    pc = meta.get("pending_confirmation")
+    if not lf or not pc or _confirmation_expired(pc):
+        return False
+    from datetime import timedelta
+    try:
+        if datetime.fromisoformat(lf.get("at", "")) < datetime.now() - timedelta(minutes=60):
+            return False
+    except ValueError:
+        return False
+    item = _find_flete_zoho_item()
+    if not item:
+        wa_send(from_number,
+                "No encontré el item FLETE DE MERCADERIA en Zoho Books — "
+                "agregalo manualmente a la cotización por favor.")
+        return True
+    pc["line_items"].append({
+        "item_id": item["item_id"],
+        "name": item.get("item_name", "FLETE DE MERCADERIA"),
+        "quantity": 1, "rate": round(float(lf["total"]), 2),
+        "unit": item.get("unit", ""),
+    })
+    wa_send(from_number,
+            f"Agregando flete Expreco a {lf['destino'].title()} "
+            f"(L{lf['total']:,.2f} antes de ISV) y regenerando PDF...")
+    log_action("Flete", "added_to_quote", f"est={pc.get('estimate_number')} L{lf['total']}")
+    _push_corrections_to_zoho_and_resend(from_number, pc, meta, state)
+    return True
+
+
 def orchestrate(message_data: dict):
-    time.sleep(10)
+    # v30.3: números internos (Daniel/equipo) no esperan el batching de 10s —
+    # respuesta inmediata en modo asistente.
+    if not is_trusted_number(message_data.get("from", "")):
+        time.sleep(10)
 
     state     = load_state()
     from_number = message_data.get("from", "")
@@ -5574,6 +5794,14 @@ def orchestrate(message_data: dict):
         # v10b: if Daniel replies with a number (1-6) and there is a pending
         # MIG handoff, dispatch the answer to the customer and return.
         if _try_consume_mig_handoff(from_number, text, state):
+            return
+
+        # v30.3: FLETE Expreco — "agregar flete" a la cotización pendiente, y
+        # preguntas de envío/flete respondidas determinísticamente ANTES de que
+        # los flows pendientes (nombre de cliente, confirmación) se las traguen.
+        if _try_add_flete_to_pending(from_number, text, state):
+            return
+        if flete_agent(from_number, text, state):
             return
 
         # If a quote was just sent and is awaiting confirmation/correction by

@@ -329,6 +329,61 @@ q = main._quantity_question_for_product("INCONEL NiCrFe-3 1/8")
 check("INCONEL → pregunta libras", "libra" in q.lower())
 
 
+# ─── 5. Flete Expreco (v30.3 — puro, usa data/expreco_rates.json real) ──────
+section("5. Flete Expreco")
+
+q = main._detect_flete_query("que vale envío a márcala la paz 8 libras")
+check("'envío a márcala la paz 8 libras' → destino MARCALA",
+      q and q["row"] and q["row"]["destino"] == "MARCALA")
+check("  peso detectado = 8 lbs", q and q["peso_lbs"] == 8)
+check("  origen default = SPS", q and q["origen"] == "SAN PEDRO SULA")
+if q and q["row"]:
+    calc = main.calcular_flete(q["row"], q["peso_lbs"])
+    check("  total = 188.10 + 3×2.25 = L194.85", abs(calc["total"] - 194.85) < 0.01,
+          f"got {calc['total']}")
+
+q = main._detect_flete_query("cuanto cuesta el envio a tela 50 lbs")
+check("'envio a tela 50 lbs' → TELA, total L145.37",
+      q and q["row"] and q["row"]["destino"] == "TELA"
+      and abs(main.calcular_flete(q["row"], q["peso_lbs"])["total"] - 145.37) < 0.01)
+
+q = main._detect_flete_query("flete a santiago tela de una caja")
+check("'santiago tela' le gana a 'tela' (substring más largo) y es tarifa fija",
+      q and q["row"] and q["row"]["destino"] == "SANTIAGO TELA"
+      and q["row"]["tipo"] == 3
+      and abs(main.calcular_flete(q["row"], None)["total"] - 273.93) < 0.01)
+
+q = main._detect_flete_query("envío a tegucigalpa 8 libras")
+check("'envío a tegucigalpa' → destino TGU con ORIGEN SPS (no confundir)",
+      q and q["row"] and q["row"]["destino"] == "TEGUCIGALPA"
+      and q["origen"] == "SAN PEDRO SULA"
+      and abs(main.calcular_flete(q["row"], q["peso_lbs"])["total"] - (94.07 + 3 * 1.14)) < 0.01)
+
+q = main._detect_flete_query("envío a choloma 10 kg")
+check("kg → lbs: 10 kg ≈ 22 lbs para el cálculo", q and abs(q["peso_lbs"] - 22.0) < 0.1)
+
+q = main._detect_flete_query("envío a marcala")
+check("sin peso → total None (pregunta cuántas libras)",
+      q and q["row"] and main.calcular_flete(q["row"], None)["total"] is None)
+
+check("sin keyword de envío NO dispara ('tienen electrodo en marcala')",
+      main._detect_flete_query("tienen electrodo en marcala") is None)
+check("'hola buen dia' NO dispara", main._detect_flete_query("hola buen dia") is None)
+check("'quiero una cotización de 6011' NO dispara",
+      main._detect_flete_query("quiero una cotización de 6011") is None)
+check("keyword sin destino conocido NO dispara ('me hacen envíos?')",
+      main._detect_flete_query("me hacen envíos?") is None)
+
+check("'agregar flete' matchea el regex de agregar",
+      bool(main._ADD_FLETE_RE.search("agregar flete")) and
+      bool(main._ADD_FLETE_RE.search("agregue el flete a la cotización")) and
+      not main._ADD_FLETE_RE.search("cuanto vale el flete"))
+
+check("modo asistente: trusted tiene módulo, cliente no",
+      "ASISTENTE INTERNO" in main._build_internal_assistant_context("50497041381")
+      and main._build_internal_assistant_context("50412345678") == "")
+
+
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
 total = len(results)

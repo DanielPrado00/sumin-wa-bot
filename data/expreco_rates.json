@@ -1,0 +1,2202 @@
+[
+ {
+  "origen": "CHOLUTECA",
+  "destino": "SAN LORENZO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "COMAYAGUA",
+  "destino": "PIEDRAS AZULES COMAYAGUA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.53
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "ALDEA COLORADITO ATLANTIDA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "ALDEA SAN DIEGO EL PARAISO",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 192.79
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "ALDEA SATUYE",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "ARIZONA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "AZACUALPA STA BARBARA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "AZACUALPA STA BARBARA",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 188.1
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "BARACOA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "BELEN WALCHO",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 338.59
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "BONITO ORIENTAL",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "BONITO ORIENTAL",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CALLEJONES STA BARBARA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CAMPAMENTO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CANAL SECO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CARBONALES",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CATACAMAS",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CHAMELECONCITO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CHINACLA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 206.99
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CHOLOMA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CHOLUTECA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CHOLUTECA",
+  "encomienda": "CARRETE DE CABLE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 434.83
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CHOLUTECA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CIENEGUITA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "COFRADIA CORTES",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "COLINAS STA BARBARA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "COMAYAGUA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "COMAYAGUA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "COPAN RUINAS",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CORQUIN COPAN",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "COXEN HOLE",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 456.59
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "CUCUYAGUA COPAN",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "DANLI",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "DANLI",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "EL MOCHITO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "EL NEGRITO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "EL PARAISO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "EL PARAISO COPAN",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "EL PORVENIR ATLANTIDA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "EL PORVENIR ATLANTIDA",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 188.1
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "EL PORVENIR ATLANTIDA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 188.1
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "EL PROGRESO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "EL PROGRESO",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "FLORIDA COPAN",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "GRACIAS LEMPIRA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "GRACIAS LEMPIRA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "GUAIMACA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "ILAMA ATLANTIDA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "ILAMAPA ATLANTIDA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 211.03
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "INTIBUCA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "INTIBUCA",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "INTIBUCA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "JESUS DE OTORO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "JUTICALPA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "JUTICALPA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA CEIBA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA CEIBA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA ENTRADA",
+  "encomienda": "BULTO",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA ENTRADA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA ENTRADA",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA ENTRADA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA ENTRADA",
+  "encomienda": "TUBO",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA FLECHA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA LABOR",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 196.77
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA LIBERTAD COMAY.",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 233.34
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA LIMA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA MASICA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA PAZ",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA UNION COPAN",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 232.86
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LA UNION COPAN",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 192.79
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LAS VEGAS STA BARBARA",
+  "encomienda": "BULTO",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LAS VEGAS STA BARBARA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LAS VEGAS STA BARBARA",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 188.1
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LEAN",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 130.05
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LEAN",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 188.1
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "LEPAERA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "MACUELIZO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "MARCALA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "MARCOVIA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 339.22
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "MARCOVIA",
+  "encomienda": "CARRETE DE CABLE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 574.35
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "MARCOVIA",
+  "encomienda": "ROLLO DE CABLE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 574.35
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "MONJARAS",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 329.17
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "MONJARAS",
+  "encomienda": "CARRETE DE CABLE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 456.59
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "MONJARAS",
+  "encomienda": "ROLLO ALAMBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 329.17
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "MORAZAN",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "NACAOME",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "OCOTEPEQUE",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "OCOTEPEQUE",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "OLANCHITO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "OLANCHITO",
+  "encomienda": "CILINDRO",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 217.38
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "OLANCHITO",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "OLANCHITO",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "OMOA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "ORICA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 407.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "PALMEROLA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "PAVANA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 321.32
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "PE･A BLANCA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "PIEDRAS AZULES COMAYAGUA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 217.34
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "POTRERILLOS CORTES",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "PUERTO CASTILLA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "PUERTO CASTILLA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 188.1
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "PUERTO CORTES",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "PUERTO CORTES",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "PUERTO CORTES",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "PUERTO CORTES",
+  "encomienda": "TUBO",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "QUEBRADA DE AGUA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "QUEBRADA DE ARENA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "QUEBRADA DE ARENA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "QUIMISTAN",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "RIO CLARO",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 266.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "RIO LINDO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN ALEJO",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 273.93
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN ALEJO",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 188.1
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN FCO. ATLANTIDA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN FCO. DEL VALLE OCOT.",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 338.59
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN JERONIMO COMAYAGUA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 221.58
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN JOSE COLINAS",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN JUAN PUEBLO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN LORENZO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN LUIS COMAYAGUA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 217.63
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN LUIS S.B.",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN MARCOS COLON",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 282.2,
+  "valor_exceso_lb": 3.21,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN MARCOS DE OCOTEPEQUE",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN PEDRO SULA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAN PEDRO SULA",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SANTA BARBARA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SANTA BARBARA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SANTA CRUZ YOJOA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SANTA CRUZ YOJOA",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 188.1
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SANTA RITA YORO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SANTA ROSA COPAN",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SANTA ROSA COPAN",
+  "encomienda": "CARRETE DE CABLE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 329.17
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SANTA ROSA COPAN",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SANTA ROSA COPAN",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SANTA ROSA COPAN",
+  "encomienda": "TUBO",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SANTIAGO PURINGLA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 266.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SANTIAGO TELA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 273.93
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAVA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SAVA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SENSENTI",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 301.41
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SIEMPRE VIVA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SIGUATEPEQUE",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SIGUATEPEQUE",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SIGUATEPEQUE",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SINUAPA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 338.59
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "SONAGUERA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TALANGA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TAMARA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TAULABE",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "BALDE PLASTICO",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "BOBINA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "BULTO",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "BUMPER GRANDE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 363.41
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "C.P.U.",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 547.85
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "CARGO MENSUAL",
+  "tipo": 3,
+  "peso_base_lbs": 2.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 2568.59
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "CARRETE DE CABLE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 329.17
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "COLCHONES",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 365.27
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "COMPUTADORA PORTATIL",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 776.22
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "CUBETA (LLENA)",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "HIELERA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 104.37
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "IMPRESORA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 305.28
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "LLANTA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 131.68
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "LLANTA RIN 15",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 131.65
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "LLANTA RIN 16 AL 20",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 131.68
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "MALETA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 229.2
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "MONITOR",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 456.59
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "MUEBLE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 260.91
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "ROLLO",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "ROLLO DE CABLE",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "SILLA DE RUEDAS",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 325.09
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "TANQUE DE AGUA GRANDE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 365.27
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "TOLVA METALICA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 146.1
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "TROCO",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 198.42
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "TUBO",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "VARILLA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 122.1
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TELA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TELA",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TEPUSTECA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TOCOA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TOCOA",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TOCOA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TOCOA",
+  "encomienda": "TUBO",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 188.1
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TRINIDAD STA BARBARA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TRINIDAD YORO",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 275.04
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TRUJILLO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "TRUJILLO",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "VALLE DE SIRIA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 289.17
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "VILLA SAN ANTONIO COMAYAGUA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "VILLA SAN FCO.FM",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 289.17
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "VILLANUEVA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "VIRREY",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "YORO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "SAN PEDRO SULA",
+  "destino": "YORO",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "CATACAMAS",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "CHOLUTECA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "CHOLUTECA",
+  "encomienda": "CARRETE DE CABLE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 329.17
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "CHOLUTECA",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "CHOLUTECA",
+  "encomienda": "ROLLO DE CABLE",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "CHOLUTECA",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "COMAYAGUA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "DANLI",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "EL GUASAULE",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 273.93
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "INTIBUCA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "JUTICALPA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "JUTICALPA",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "MACUELIZO",
+  "encomienda": "BULTO",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "MONJARAS",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 273.93
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "OLANCHITO",
+  "encomienda": "SOBRE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 282.19
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "SAN BERNARDO",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 232.58
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "SAN LORENZO",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "SAN LORENZO",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "SANTA CRUZ YOJOA",
+  "encomienda": "CAJA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "SANTA ROSA COPAN",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 188.1,
+  "valor_exceso_lb": 2.25,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "SIGUATEPEQUE",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "SIGUATEPEQUE",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "SOSOA YOJOA",
+  "encomienda": "PAQUETE",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 178.7
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "TEGUCIGALPA",
+  "encomienda": "BOLSA",
+  "tipo": 3,
+  "peso_base_lbs": 0.0,
+  "valor_base": 0.0,
+  "valor_exceso_lb": 0.0,
+  "valor_fijo": 94.07
+ },
+ {
+  "origen": "TEGUCIGALPA",
+  "destino": "VALLE ANGELES",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ },
+ {
+  "origen": "TELA",
+  "destino": "TELA",
+  "encomienda": "CAJA",
+  "tipo": 1,
+  "peso_base_lbs": 5.0,
+  "valor_base": 94.07,
+  "valor_exceso_lb": 1.14,
+  "valor_fijo": 0.0
+ }
+]
