@@ -623,6 +623,28 @@ finally:
     main._fetch_vendors = _orig_vendors
 
 
+# ─── 12. Costo liquidado por factura (v30.15, caso HWT250512SU-1) ───────────
+section("12. Costo liquidado (v30.15)")
+
+# Caso real validado por Daniel: 160 rollos a 14.34 USD, subtotal 13,283.40,
+# cargos asociados 1,605.26 USD, cambio ~25.68 → liquidado ≈ 412.5 L
+_det = {
+    "exchange_rate": 25.68, "sub_total": 13283.40, "currency_code": "USD",
+    "landed_costs": [{"amount": 1104.99}, {"amount": 5.09},
+                     {"amount": 136.54}, {"amount": 358.64}],
+}
+_li = {"rate": 14.34, "quantity": 160}
+_lcy, _landed = main._bill_landed_unit(_det, _li)
+check("al cambio sin cargos ≈ 368.25 L", _lcy is not None and abs(_lcy - 14.34 * 25.68) < 0.5)
+check("liquidado ≈ 412.5 L (±3) — reproduce la valoración de Zoho",
+      _landed is not None and abs(_landed - 412.54) < 3.0,
+      f"got {_landed}")
+# Sin cargos ni cambio → None
+_lcy2, _landed2 = main._bill_landed_unit({"sub_total": 100}, {"rate": 10, "quantity": 5})
+check("sin exchange_rate/cargos → sin estimación (no inventa)",
+      _lcy2 is None and _landed2 is None)
+
+
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
 total = len(results)

@@ -5999,6 +5999,44 @@ def _item_cost_summary(item_id: str):
     return wac, stock, asset
 
 
+def _bill_landed_unit(det: dict, li: dict):
+    """v30.15: costo LIQUIDADO por unidad en lempiras, derivado de la propia
+    factura: (rate + prorrateo por valor de los cargos asociados — aduaneros,
+    transporte, cargos locales) × tipo de cambio de la factura. Devuelve
+    (aprox_L_sin_cargos|None, liquidado_L|None). Daniel valida: 14.34 USD FOB
+    → ≈412.54 L liquidado (HWT250512SU-1)."""
+    try:
+        rate = float(li.get("rate") or 0)
+        qty = float(li.get("quantity") or 0)
+        ex = float(det.get("exchange_rate") or 0)
+        if rate <= 0 or qty <= 0:
+            return None, None
+        lcy = round(rate * ex, 2) if ex and ex != 1 else None
+        # Cargos asociados: Zoho los guarda en la bill bajo alguna de estas
+        # llaves según versión del API. Sumamos montos en moneda de la bill.
+        alloc = 0.0
+        for key in ("landed_costs", "landed_cost_details", "associated_expenses",
+                    "other_charges"):
+            for lc in det.get(key, []) or []:
+                try:
+                    alloc += float(lc.get("amount") or lc.get("amount_bcy") or 0)
+                except (TypeError, ValueError):
+                    continue
+            if alloc:
+                break
+        sub = float(det.get("sub_total") or 0)
+        landed = None
+        if alloc and sub > 0 and ex:
+            line_total = rate * qty
+            landed = round((rate + (line_total / sub) * alloc / qty) * ex, 2)
+        return lcy, landed
+    except Exception:
+        return None, None
+
+
+_BILL_KEYS_LOGGED = {"done": False}
+
+
 def _item_purchase_history(item_id: str, max_entries: int = 3,
                            max_bills: int = 60, vendor_name: str = "",
                            vendor_id: str = "") -> list[dict]:
@@ -6048,6 +6086,11 @@ def _item_purchase_history(item_id: str, max_entries: int = 3,
             _BILL_CACHE["details"][bid] = det
         for li in det.get("line_items", []):
             if li.get("item_id") == item_id:
+                if not _BILL_KEYS_LOGGED["done"]:
+                    _BILL_KEYS_LOGGED["done"] = True
+                    log_action("ZohoAPI", "bill_detail_keys",
+                               ",".join(sorted(det.keys()))[:300])
+                lcy, landed = _bill_landed_unit(det, li)
                 out.append({
                     "date": det.get("date", ""),
                     "vendor": det.get("vendor_name", ""),
@@ -6055,6 +6098,7 @@ def _item_purchase_history(item_id: str, max_entries: int = 3,
                     "rate": float(li.get("rate") or 0),
                     "currency": det.get("currency_code", "HNL"),
                     "bill_number": det.get("bill_number", ""),
+                    "lcy": lcy, "landed": landed,
                 })
         if len(out) >= max_entries:
             break
@@ -6225,6 +6269,11 @@ def _vendor_cost_table(vendor_id: str, filter_tokens: set,
                     continue
             entry = (f"{det.get('date', '')}: {float(li.get('quantity') or 0):g} und a "
                      f"{float(li.get('rate') or 0):,.2f} {cur}")
+            lcy, landed = _bill_landed_unit(det, li)
+            if landed:
+                entry += f" → liq. ≈ {landed:,.2f} L"
+            elif lcy:
+                entry += f" (≈ {lcy:,.2f} L al cambio)"
             rows_by_item.setdefault(nm, []).append(entry)
     lines = []
     for nm in sorted(rows_by_item):
@@ -6348,8 +6397,13 @@ def cost_agent(from_number: str, text: str, state: dict) -> bool:
             for h in hist:
                 cur = {"USD": "dólares", "HNL": "lempiras", "": "lempiras"}.get(
                     h["currency"], h["currency"])
-                lines.append(f"• {h['date']} — {h['vendor']} — {h['qty']:g} und a "
-                             f"{h['rate']:,.2f} {cur} cada una ({h['bill_number']})")
+                ln = (f"• {h['date']} — {h['vendor']} — {h['qty']:g} und a "
+                      f"{h['rate']:,.2f} {cur} cada una ({h['bill_number']})")
+                if h.get("landed"):
+                    ln += f"\n   liquidado ≈ {h['landed']:,.2f} lempiras c/u (con cargos de la factura)"
+                elif h.get("lcy"):
+                    ln += f"\n   ≈ {h['lcy']:,.2f} lempiras al cambio (sin cargos aduaneros)"
+                lines.append(ln)
         else:
             # v30.12: sin bill → buscar en órdenes de compra (precio de orden)
             po_hist = po_hist_pre or _item_po_history(item.get("item_id", ""))
