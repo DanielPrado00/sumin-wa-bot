@@ -5964,6 +5964,13 @@ INTERNAL_AGENT_NUMBERS = {DANIEL_PHONE, DANIEL_PHONE_2}
 
 _INV_CACHE: dict = {"details": {}}
 
+# v31.1: alias de clientes como los dice Daniel → nombre real en Zoho.
+# Agregar acá los que vaya dando ("hay varios así, se los vamos dando poco a poco").
+CLIENT_ALIASES: dict[str, str] = {
+    "azunosa": "AZUCARERA DEL NORTE",
+    "chumbagua": "AZUCARERA CHUMBAGUA",   # compra bajo 2 nombres (+ ENERGIA CHUMBAGUA)
+}
+
 
 def _tool_buscar_items(args: dict) -> dict:
     catalog = fetch_zoho_catalog()
@@ -6026,6 +6033,10 @@ def _tool_listar_clientes(args: dict) -> dict:
     token = get_zoho_access_token()
     if not token:
         return {"error": "sin token Zoho"}
+    buscar = (args.get("buscar", "") or "").strip()
+    alias = CLIENT_ALIASES.get(_strip_accents(buscar).lower())
+    if alias:
+        args = {**args, "buscar": alias}
     try:
         r = httpx.get("https://www.zohoapis.com/books/v3/contacts",
                       params={"organization_id": ZOHO_ORG_ID,
@@ -6191,7 +6202,8 @@ REGLAS:
 - Dato primero, mensajes cortos. Formato de precios: monto + 'lempiras' + unidad en palabras ('322 lempiras cada uno', '51.75 lempiras cada libra'). Precios al cliente llevan ISV 15%; costos y datos internos se dan tal cual.
 - SOLO LECTURA: tus herramientas no modifican nada en Zoho. NUNCA inventes montos, fechas ni cantidades — si una herramienta no da el dato, decilo y sugerí cómo afinarlo.
 - Para comparaciones ('¿y el mes anterior?', '¿cuál azucarera se lleva más?') llamá las herramientas las veces que haga falta y resumí la comparación.
-- Grupo 'azucareras': clientes con AZUCARERA en el nombre, MÁS 'ENERGIA CHUMBAGUA' (Chumbagua compra bajo Azucarera Chumbagua y Energía Chumbagua). Usá listar_clientes para resolver los ids.
+- Grupo 'azucareras': clientes con AZUCARERA en el nombre, MÁS 'ENERGIA CHUMBAGUA' (Chumbagua compra bajo Compañía Azucarera Chumbagua y Energía Chumbagua). OJO: 'AZUCENA' NO es azucarera. Usá listar_clientes para resolver los ids.
+- Alias de clientes (como los dice Daniel): 'Azunosa' = AZUCARERA DEL NORTE; 'Chumbagua' = Azucarera Chumbagua + Energía Chumbagua. listar_clientes ya entiende estos alias.
 - ventas_item devuelve montos SIN ISV y puede ser parcial (resultado_parcial=true): si es parcial, decilo.
 - Memoria de la conversación: los mensajes anteriores son contexto válido para seguimientos.
 """
