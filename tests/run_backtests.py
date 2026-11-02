@@ -549,10 +549,12 @@ check("keywords: 'valoración' dispara",
 _orig = (main.fetch_zoho_catalog, main.match_product_to_catalog, main._item_purchase_history)
 main.fetch_zoho_catalog = lambda: [{"item_id": "X1", "item_name": 'MICROALAMBRE E71T-GS 0.030" 10 LBS', "rate": 1045.44, "unit": "ROLLO", "stock_on_hand": 797}]
 main.match_product_to_catalog = lambda q, c, requested_unit="": c[0]
-main._item_purchase_history = lambda item_id, max_entries=3, max_bills=30, vendor_name="": [
+main._item_purchase_history = lambda *a, **k: [
     {"date": "2026-09-14", "vendor": "Inwelt", "qty": 500, "rate": 27.8, "currency": "USD", "bill_number": "BILL-0012"},
     {"date": "2026-06-02", "vendor": "Inwelt", "qty": 300, "rate": 26.5, "currency": "USD", "bill_number": "BILL-0007"},
 ]
+_orig_cost_summary = main._item_cost_summary
+main._item_cost_summary = lambda item_id: (745.82, -43.0, -32070.34)
 _orig_extract = main.extract_items_for_quote
 main.extract_items_for_quote = lambda t, h: ([], "")  # fallback → query entera
 try:
@@ -563,6 +565,8 @@ try:
           "2026-09-14" in _msg and "27.80 dólares" in _msg and "BILL-0012" in _msg)
     check("  marcado como interno", "interno" in _msg)
     check("  con precio de venta y stock", "1,045.44" in _msg and "797" in _msg)
+    check("  con costo promedio en libros (WAC) y alerta de stock negativo",
+          "745.82 lempiras por unidad" in _msg and "stock negativo" in _msg)
 
     # v30.10: seguimiento corto en modo costo ('y el de 0.9 mm?')
     main._TEST_STATE.capture = []
@@ -584,8 +588,8 @@ try:
          {"product": "maneral oxicorte safecut", "quantity": 1, "unit": ""}], "")
     main.match_product_to_catalog = lambda q, c, requested_unit="": (
         _cat2[0] if "460" in q else _cat2[1])
-    main._item_purchase_history = lambda item_id, max_entries=3, max_bills=30, vendor_name="": []
-    main._item_po_history = lambda item_id, max_entries=3, max_pos=30: [
+    main._item_purchase_history = lambda *a, **k: []
+    main._item_po_history = lambda *a, **k: [
         {"date": "2026-05-12", "vendor": "SPEED PAN", "qty": 200, "rate": 14.2, "currency": "USD", "po_number": "OC-0050", "status": "facturada"}]
     main._TEST_STATE.capture = []
     ok3 = main.cost_agent("50497041381", "cual es el costo de la antorcha CA-460 y el maneral safecut", _state_c)
@@ -595,6 +599,7 @@ try:
 finally:
     main.fetch_zoho_catalog, main.match_product_to_catalog, main._item_purchase_history = _orig
     main.extract_items_for_quote = _orig_extract
+    main._item_cost_summary = _orig_cost_summary
     main._item_po_history = lambda *a, **k: []
     main._TEST_STATE.capture = None
 

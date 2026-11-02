@@ -5965,8 +5965,43 @@ _COST_KEYWORD_RE = re.compile(
 _BILL_CACHE: dict = {"list": None, "expires": 0.0, "details": {}}
 
 
+_ITEM_COST_CACHE: dict = {}
+
+
+def _item_cost_summary(item_id: str):
+    """v30.13: costo promedio en libros (WAC aterrizado) desde GET /items/{id}:
+    suma de location_asset_value / stock_on_hand — el mismo cálculo que Daniel
+    hace a mano desde el informe de valoración (ej. WH450: -32,070/-43 = 745.82).
+    Devuelve (wac|None, stock, asset_total)."""
+    token = get_zoho_access_token()
+    if not token or not ZOHO_ORG_ID or not item_id:
+        return None, 0.0, 0.0
+    now = time.time()
+    c = _ITEM_COST_CACHE.get(item_id)
+    if c and now < c["expires"]:
+        return c["wac"], c["stock"], c["asset"]
+    wac, stock, asset = None, 0.0, 0.0
+    try:
+        r = httpx.get(f"https://www.zohoapis.com/books/v3/items/{item_id}",
+                      params={"organization_id": ZOHO_ORG_ID},
+                      headers={"Authorization": f"Zoho-oauthtoken {token}"}, timeout=10)
+        if r.status_code == 200:
+            it = r.json().get("item", {})
+            stock = float(it.get("stock_on_hand") or 0)
+            asset = sum(float(loc.get("location_asset_value") or 0)
+                        for loc in it.get("locations", []))
+            if stock:
+                wac = round(asset / stock, 2)
+    except Exception as e:
+        log_action("ZohoAPI", "item_cost_error", str(e)[:120])
+    _ITEM_COST_CACHE[item_id] = {"wac": wac, "stock": stock, "asset": asset,
+                                 "expires": now + 1800}
+    return wac, stock, asset
+
+
 def _item_purchase_history(item_id: str, max_entries: int = 3,
-                           max_bills: int = 30, vendor_name: str = "") -> list[dict]:
+                           max_bills: int = 60, vendor_name: str = "",
+                           vendor_id: str = "") -> list[dict]:
     """Últimas entradas (compras) de un item, escaneando las facturas de
     compra más recientes. v30.11: si el item tiene proveedor asignado en
     Zoho, se buscan las facturas DE ESE PROVEEDOR (los items importados —
@@ -5977,11 +6012,13 @@ def _item_purchase_history(item_id: str, max_entries: int = 3,
         return []
     headers = {"Authorization": f"Zoho-oauthtoken {token}"}
     now = time.time()
-    cache_key = f"list::{(vendor_name or '').strip().lower()}"
+    cache_key = f"list::{vendor_id}::{(vendor_name or '').strip().lower()}"
     cached = _BILL_CACHE.get(cache_key)
     if cached is None or now > cached.get("expires", 0):
-        params = {"organization_id": ZOHO_ORG_ID, "per_page": max_bills}
-        if vendor_name:
+        params = {"organization_id": ZOHO_ORG_ID, "per_page": min(200, max(50, max_bills))}
+        if vendor_id:
+            params["vendor_id"] = vendor_id
+        elif vendor_name:
             params["search_text"] = vendor_name[:100]
         try:
             r = httpx.get("https://www.zohoapis.com/books/v3/bills",
@@ -5991,8 +6028,8 @@ def _item_purchase_history(item_id: str, max_entries: int = 3,
             log_action("ZohoAPI", "bills_list_error", str(e))
             bills = []
         # Fallback: búsqueda por proveedor sin resultados → lista global
-        if vendor_name and not bills:
-            return _item_purchase_history(item_id, max_entries, max_bills, "")
+        if (vendor_name or vendor_id) and not bills:
+            return _item_purchase_history(item_id, max_entries, max_bills)
         bills.sort(key=lambda b: b.get("date", ""), reverse=True)
         cached = {"bills": bills, "expires": now + 1800}
         _BILL_CACHE[cache_key] = cached
@@ -6022,8 +6059,8 @@ def _item_purchase_history(item_id: str, max_entries: int = 3,
         if len(out) >= max_entries:
             break
     # El proveedor tenía bills pero el item no apareció → intentar global
-    if not out and vendor_name:
-        return _item_purchase_history(item_id, max_entries, max_bills, "")
+    if not out and (vendor_name or vendor_id):
+        return _item_purchase_history(item_id, max_entries, max_bills)
     return out[:max_entries]
 
 
@@ -6084,6 +6121,7 @@ def _item_po_history(item_id: str, max_entries: int = 3,
                     "rate": float(li.get("rate") or 0),
                     "currency": det.get("currency_code", "USD"),
                     "po_number": det.get("purchaseorder_number", ""),
+                    "vendor_id": det.get("vendor_id", ""),
                     "status": _PO_STATUS_ES.get(det.get("status", ""), det.get("status", "")),
                 })
         if len(out) >= max_entries:
@@ -6150,6 +6188,16 @@ def cost_agent(from_number: str, text: str, state: dict) -> bool:
             continue
         hist = _item_purchase_history(item.get("item_id", ""),
                                       vendor_name=item.get("vendor_name", "") or "")
+        po_hist_pre = []
+        if not hist:
+            # v30.13: cadena proveedor — el item no tiene vendor asignado pero
+            # sus órdenes de compra sí: usar el vendor de la OC para buscar
+            # las facturas de ESE proveedor (las de importación suelen quedar
+            # fuera de las últimas N globales).
+            po_hist_pre = _item_po_history(item.get("item_id", ""))
+            vid = po_hist_pre[0].get("vendor_id", "") if po_hist_pre else ""
+            if vid:
+                hist = _item_purchase_history(item.get("item_id", ""), vendor_id=vid)
         name  = item.get("item_name", "")
         stock = item.get("stock_on_hand", "")
         venta = float(item.get("rate") or 0)
@@ -6162,7 +6210,7 @@ def cost_agent(from_number: str, text: str, state: dict) -> bool:
                              f"{h['rate']:,.2f} {cur} cada una ({h['bill_number']})")
         else:
             # v30.12: sin bill → buscar en órdenes de compra (precio de orden)
-            po_hist = _item_po_history(item.get("item_id", ""))
+            po_hist = po_hist_pre or _item_po_history(item.get("item_id", ""))
             if po_hist:
                 lines.append("Sin factura registrada; últimas órdenes de compra:")
                 for h in po_hist:
@@ -6173,6 +6221,15 @@ def cost_agent(from_number: str, text: str, state: dict) -> bool:
                                  f"({h['po_number']}, {h['status']})")
             else:
                 lines.append("• Sin entradas en facturas ni órdenes de compra recientes.")
+        # v30.13: costo promedio en libros (aterrizado) — mismo cálculo que el
+        # informe de valoración: activo de inventario / existencias.
+        wac, stock_t, asset_t = _item_cost_summary(item.get("item_id", ""))
+        if wac is not None:
+            wline = (f"Costo promedio en libros: {wac:,.2f} lempiras por unidad "
+                     f"({asset_t:,.2f} / {stock_t:g})")
+            if stock_t < 0:
+                wline += " ⚠️ stock negativo — falta registrar entrada"
+            lines.append(wline)
         if venta > 0:
             lines.append(f"Venta: {venta:,.2f} lempiras + ISV = "
                          f"{venta * 1.15:,.2f} lempiras. Stock: {stock}.")
