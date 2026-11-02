@@ -2889,6 +2889,37 @@ def zoho_inventory_context(text: str, history: list | None = None) -> str:
         if not catalog:
             return ""
         matched = match_product_to_catalog(query, catalog)
+
+        # v30.7 (bug 02-nov, tungstenos 1/8 y 3/32): el matcher elige UN solo
+        # item y devuelve NINGUNO cuando la consulta abarca VARIOS productos
+        # (dos diámetros, varias variantes) → el cerebro quedaba sin precios y
+        # decía "no me aparece en el sistema". Ahora SIEMPRE inyectamos además
+        # los top candidatos del prefiltro con precio, como tabla de datos,
+        # para que el cerebro resuelva consultas multi-producto él mismo.
+        candidates_tbl = ""
+        try:
+            focused = _prefilter_catalog(_normalize_query_for_search(query), catalog, top_n=8)
+            rows = []
+            for it in focused[:8]:
+                nm = it.get("item_name", "")
+                if not nm:
+                    continue
+                rt = float(it.get("rate") or 0)
+                un = it.get("unit", "") or "UND"
+                st = it.get("stock_on_hand", "")
+                if rt > 0:
+                    rows.append(f"  - {nm} | base L{rt:g}/{un} → con ISV L{round(rt * 1.15, 2):,.2f} | stock {st}")
+                else:
+                    rows.append(f"  - {nm} | SIN PRECIO CARGADO | stock {st}")
+            if rows:
+                candidates_tbl = (
+                    "\nCANDIDATOS DEL CATÁLOGO (datos reales Zoho; si la consulta "
+                    "abarca varios productos/diámetros, usá los que apliquen de esta "
+                    "lista — los montos 'con ISV' son los que se dan al cliente, en "
+                    "tu formato de palabras):\n" + "\n".join(rows))
+        except Exception as e2:
+            log_action("ZohoAPI", "candidates_ctx_error", str(e2))
+
         if matched:
             item_name = matched.get("item_name", "")
             sku       = matched.get("sku", "")
@@ -2901,7 +2932,14 @@ def zoho_inventory_context(text: str, history: list | None = None) -> str:
                              f"Da este precio directamente al cliente (ya incluye ISV).")
             return (f"\n\n[INVENTARIO ZOHO — DATO REAL]: Producto encontrado: '{item_name}' "
                     f"(SKU: {sku}).{price_ctx} "
-                    f"Confirma disponibilidad y da precio con ISV incluido.")
+                    f"Confirma disponibilidad y da precio con ISV incluido."
+                    f"{candidates_tbl}")
+        elif candidates_tbl:
+            return (f"\n\n[INVENTARIO ZOHO — DATO REAL]: La consulta parece abarcar varios "
+                    f"productos o variantes; no hay un único match."
+                    f"{candidates_tbl}\n"
+                    f"Si lo que pide el cliente NO está en la lista, decí que lo confirmás "
+                    f"(puede estar catalogado con otro nombre) — nunca inventes precios.")
         else:
             return (f"\n\n[INVENTARIO ZOHO — DATO REAL]: No se encontró un producto claro en el "
                     f"catálogo de Zoho para la consulta del cliente. IMPORTANTE: esto NO significa que "

@@ -463,6 +463,37 @@ check("flete solo (sin cotización) sigue respondiendo directo",
 main._TEST_STATE.capture = None
 
 
+# ─── 8. Contexto Zoho multi-producto (v30.7, caso tungstenos 1/8 y 3/32) ───
+section("8. Contexto Zoho multi-producto (v30.7)")
+
+_fake_catalog = [
+    {"item_name": "ELECTRODO PARA TIG TUNGSTENO DE 1/8 (CERIO 2%) GRIS",
+     "sku": "6030002", "rate": 280, "unit": "UND", "stock_on_hand": 544},
+    {"item_name": "ELECTRODO PARA TIG TUNGSTENO DE 3/32 (CERIO 2%) GRIS",
+     "sku": "6030005", "rate": 170, "unit": "UND", "stock_on_hand": 433},
+    {"item_name": "CARETA BASICA", "sku": "CB1", "rate": 550, "unit": "UND",
+     "stock_on_hand": 10},
+]
+_orig_fetch, _orig_match = main.fetch_zoho_catalog, main.match_product_to_catalog
+main.fetch_zoho_catalog = lambda: _fake_catalog
+main.match_product_to_catalog = lambda q, c, requested_unit="": None  # Haiku dice NINGUNO
+try:
+    ctx = main.zoho_inventory_context("que vale el tungsteno de 1/8 y de 3/32")
+    check("matcher=NINGUNO pero el contexto trae los candidatos con precio",
+          "TUNGSTENO DE 1/8" in ctx and "TUNGSTENO DE 3/32" in ctx)
+    check("  con precio ISV calculado (280→322, 170→195.50)",
+          "322" in ctx and "195.50" in ctx)
+    check("  y NO dice 'No se encontró' (el cerebro tiene datos)",
+          "No se encontró" not in ctx)
+    # con match único, la tabla igual acompaña
+    main.match_product_to_catalog = lambda q, c, requested_unit="": _fake_catalog[0]
+    ctx2 = main.zoho_inventory_context("tungsteno 1/8")
+    check("con match único: dato real + tabla de candidatos",
+          "Producto encontrado" in ctx2 and "CANDIDATOS DEL CATÁLOGO" in ctx2)
+finally:
+    main.fetch_zoho_catalog, main.match_product_to_catalog = _orig_fetch, _orig_match
+
+
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
 total = len(results)
