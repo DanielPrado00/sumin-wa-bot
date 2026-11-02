@@ -384,6 +384,41 @@ check("modo asistente: trusted tiene módulo, cliente no",
       and main._build_internal_assistant_context("50412345678") == "")
 
 
+# ─── 6. Peso de presentación — constraint duro (v30.4, caso EST-007072) ────
+section("6. Peso de presentación (v30.4)")
+
+_cat_2lb  = {"item_name": 'MICROALAMBRE E71T-GS 0.030" 2 LBS A.A.', "sku": "MA-2", "rate": 298.13}
+_cat_10lb = {"item_name": 'MICROALAMBRE E71T-GS 0.030"(0.8mm) 10 LBS', "sku": "MA-10", "rate": 1045.44}
+_cat_elec = {"item_name": "ELECTRODO 6011 1/8 A.A.", "sku": "E-6011", "rate": 45.0}
+_focused = [_cat_10lb, _cat_2lb, _cat_elec]
+
+# Caso real EST-007072: pidió 2 lbs, Haiku devolvió 10 LBS → swap al de 2 LBS
+got = main._enforce_weight_match("microalambre e71t-gs 0.030 2 lbs", _cat_10lb, _focused)
+check("EST-007072: pidió 2 lbs + matcher devolvió 10 LBS → swap a 2 LBS",
+      got is _cat_2lb, f"got {got and got.get('sku')}")
+
+# Peso coincide → no tocar
+got = main._enforce_weight_match("microalambre 0.030 10 lbs", _cat_10lb, _focused)
+check("peso coincide (10 lbs) → se mantiene", got is _cat_10lb)
+
+# Pidió peso que no existe (5 lbs) y el elegido tiene otro → NINGUNO (preguntar)
+got = main._enforce_weight_match("rollo e71t-gs 0.030 5 lbs", _cat_10lb, [_cat_10lb, _cat_elec])
+check("peso inexistente (5 lbs) sin variante correcta → None (pregunta)", got is None)
+
+# Electrodo por libra: '50 lbs de 6011' — el 50 es CANTIDAD, no presentación → no tocar
+got = main._enforce_weight_match("electrodo 6011 1/8 50 lbs", _cat_elec, _focused)
+check("electrodo '50 lbs de 6011' (cantidad, no rollo) → se mantiene", got is _cat_elec)
+
+# Query sin peso → no aplica
+got = main._enforce_weight_match("microalambre e71t-gs 0.030", _cat_10lb, _focused)
+check("query sin peso → se mantiene", got is _cat_10lb)
+
+# Rollo sin peso en nombre del elegido pero query pide 2 lbs → swap en contexto rollo
+_cat_noweight = {"item_name": "MICROALAMBRE E71T-GS 0.030", "sku": "MA-X", "rate": 500.0}
+got = main._enforce_weight_match("rollo microalambre 0.030 2 lbs", _cat_noweight, _focused)
+check("elegido sin peso en nombre + contexto rollo → swap al de 2 LBS", got is _cat_2lb)
+
+
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
 total = len(results)

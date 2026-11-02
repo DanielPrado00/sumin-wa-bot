@@ -2580,6 +2580,48 @@ def _prefilter_catalog(query: str, catalog: list, top_n: int = 200) -> list:
     return [it for _, _, _, it in scored[:top_n]]
 
 
+_ROLLISH_RE = re.compile(
+    r"\brollos?\b|\bspools?\b|microalambre|micro alambre|alambre|tubular|"
+    r"e71t|er70s|er308|er309|er316|er4043|er5356|flux", re.IGNORECASE)
+
+
+def _enforce_weight_match(client_query: str, picked: dict | None,
+                          focused: list) -> dict | None:
+    """v30.4 (caso EST-007072, nov-2026): guard DETERMINÍSTICO post-LLM.
+    Cliente pidió rollo de 2 LBS y Haiku devolvió el de 10 LBS aunque el
+    prompt ya le decía que no. Las instrucciones al LLM no bastan — esto
+    se verifica en código:
+      • query con peso + item con peso DISTINTO → swap al variant del peso
+        correcto si existe en los candidatos, si no NINGUNO (mejor preguntar
+        que sustituir en silencio).
+      • query con peso + item SIN peso en el nombre → solo se corrige en
+        contexto de rollo (microalambre/alloys MIG); un electrodo por libra
+        ('50 lbs de 6011') no se toca porque ahí el peso es la CANTIDAD.
+    """
+    if not picked:
+        return picked
+    q_w = _extract_weights(client_query)
+    if not q_w:
+        return picked
+    p_w = _extract_weights(picked.get("item_name", "") or "")
+    if p_w and (q_w & p_w):
+        return picked
+    if not p_w and not _ROLLISH_RE.search(client_query):
+        return picked
+    for cand in focused:
+        c_w = _extract_weights(cand.get("item_name", "") or "")
+        if (c_w & q_w) and float(cand.get("rate") or 0) > 0:
+            log_action("ZohoAPI", "weight_swap",
+                       f"'{(picked.get('item_name') or '')[:40]}' → "
+                       f"'{(cand.get('item_name') or '')[:40]}' (query pedía {sorted(q_w)} lbs)")
+            return cand
+    if p_w:
+        log_action("ZohoAPI", "weight_mismatch_none",
+                   f"query='{client_query[:50]}' picked='{(picked.get('item_name') or '')[:40]}'")
+        return None
+    return picked
+
+
 def match_product_to_catalog(client_query: str, catalog: list,
                              requested_unit: str = "") -> dict | None:
     """Pick the best-matching Zoho item for a free-text product description.
@@ -2716,24 +2758,25 @@ def match_product_to_catalog(client_query: str, catalog: list,
             return None
         sku_clean = response.strip()
 
-        for item in focused:
-            if item.get("sku", "").strip() == sku_clean:
-                return item
-        for item in filtered:
-            if item.get("sku", "").strip() == sku_clean:
-                return item
-        for item in catalog:
-            if item.get("sku", "").strip() == sku_clean:
-                return item
-        for item in focused:
-            sku = item.get("sku", "")
-            if sku and (sku_clean in sku or sku in sku_clean):
-                return item
-        for item in catalog:
-            sku = item.get("sku", "")
-            if sku and (sku_clean in sku or sku in sku_clean):
-                return item
-        return None
+        picked = None
+        for pool in (focused, filtered, catalog):
+            for item in pool:
+                if item.get("sku", "").strip() == sku_clean:
+                    picked = item
+                    break
+            if picked:
+                break
+        if picked is None:
+            for pool in (focused, catalog):
+                for item in pool:
+                    sku = item.get("sku", "")
+                    if sku and (sku_clean in sku or sku in sku_clean):
+                        picked = item
+                        break
+                if picked:
+                    break
+        # v30.4: verificación determinística de peso de presentación
+        return _enforce_weight_match(client_query, picked, focused)
     except Exception as e:
         try:
             log_action("ZohoAPI", "match_error", str(e))
@@ -5044,6 +5087,7 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
         needs_price = []         # v29.3: items que matchearon pero tienen rate=0 en Zoho
         fraction_mismatches = [] # v29.3: items donde el matching ignoró la fracción
         soft_alternatives = []   # v29.6: items no encontrados con presentación exacta pero existen variantes
+        caja_questions = []      # v30.4: "caja" de electrodo sin tamaño — preguntar 10 o 50 lbs, no adivinar
         for req in items_requested:
             req_unit = _normalize_unit(req.get("unit", ""))
             zoho_item = zoho_search_item_for_quote(req["product"], requested_unit=req_unit)
@@ -5068,6 +5112,17 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                 final_unit = matched_unit
                 final_rate = float(zoho_item.get("rate") or 0)
                 conversion_note = ""
+
+                # v30.4: cliente pidió "caja" de electrodo SIN decir el tamaño
+                # → preguntar (10 o 50 lbs), no adivinar con el default por
+                # alloy. Regla de Daniel: "si yo le digo caja, que me pregunte
+                # caja de 10 o de 50".
+                if (req_unit == "CAJA" and matched_unit == "LB"
+                        and not re.search(r"\b\d+(?:\.\d+)?\s*(?:lbs?|libras?)\b",
+                                          req["product"], re.IGNORECASE)):
+                    caja_questions.append(req["product"])
+                    log_action("QuoteAgent", "caja_sin_tamano", req["product"][:60])
+                    continue
 
                 if req_unit and matched_unit and req_unit != matched_unit:
                     conv = _convert_units(
@@ -5100,6 +5155,26 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                     fraction_mismatches.append(
                         f"{req['product']} (pidió fracción {','.join(req_fracs)}, en catálogo solo {','.join(cand_fracs)})"
                     )
+                    continue
+
+                # v30.4 (caso EST-007072, nov-2026): igual que la fracción,
+                # el PESO de presentación es constraint duro. Cliente pidió
+                # rollo de 2 LBS y el matcher entregó el de 10 LBS. Si query
+                # e item especifican peso y NO coinciden → alternativas
+                # (preguntar), nunca sustituir en silencio.
+                req_w  = _extract_weights(req["product"])
+                cand_w = _extract_weights(zoho_item.get("name", "") or "")
+                if req_w and cand_w and not (req_w & cand_w):
+                    alternatives = _find_alternative_presentations(req["product"])
+                    if alternatives:
+                        soft_alternatives.append({"req": req, "options": alternatives})
+                    else:
+                        fraction_mismatches.append(
+                            f"{req['product']} (pidió {','.join(sorted(req_w))} lbs, "
+                            f"en catálogo el item es de {','.join(sorted(cand_w))} lbs)"
+                        )
+                    log_action("QuoteAgent", "weight_mismatch_blocked",
+                               f"req='{req['product'][:40]}' cand='{(zoho_item.get('name') or '')[:40]}'")
                     continue
 
                 # v29.3 BUG FIX: Daniel reportó ER316L 1/16 cotizado a L0.00 —
@@ -5138,6 +5213,18 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                     })
                 else:
                     not_found.append(req["product"])
+
+        # v30.4: cajas sin tamaño — preguntar antes de cotizar
+        if caja_questions and not line_items:
+            if len(caja_questions) == 1:
+                q_msg = (f"¿La caja de *{caja_questions[0]}* la necesita "
+                         f"de 10 lbs o de 50 lbs?")
+            else:
+                q_msg = ("Para estas cajas, ¿me confirma el tamaño "
+                         "(10 lbs o 50 lbs)?\n• " + "\n• ".join(caja_questions))
+            wa_send(from_number, q_msg)
+            log_action("QuoteAgent", "asked_caja_size", f"{len(caja_questions)} items")
+            return
 
         if unit_mismatches and not line_items:
             wa_send(
@@ -5210,8 +5297,11 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
         # avisar al cliente que los otros requieren cotización manual.
         # v29.6: también surface las soft_alternatives aquí como "para los otros
         # ítems no tengo la presentación exacta pero manejo estas".
-        if needs_price or fraction_mismatches or soft_alternatives:
+        if needs_price or fraction_mismatches or soft_alternatives or caja_questions:
             warning_lines = []
+            if caja_questions:
+                warning_lines.append("⚠️ Confírmeme el tamaño de caja (10 o 50 lbs) para: "
+                                     + ", ".join(caja_questions))
             if needs_price:
                 names = ", ".join((n.get("name") or n.get("requested_product",""))[:50] for n in needs_price)
                 warning_lines.append(f"⚠️ Sin precio cargado: {names}")
