@@ -419,6 +419,50 @@ got = main._enforce_weight_match("rollo microalambre 0.030 2 lbs", _cat_noweight
 check("elegido sin peso en nombre + contexto rollo → swap al de 2 LBS", got is _cat_2lb)
 
 
+# ─── 7. Flete + cotización combinados (v30.5) ───────────────────────────────
+section("7. Flete dentro de cotización (v30.5)")
+
+# El bug del 02-nov: "cotizame 1 lb de E308-16 3/32 y una caja de 10 lbs de
+# 6011 1/8 con envío hacia Morazán" — flete_agent se tragaba el turno.
+_txt = "cotizame una libra de e308-16 3/32 y una caja de 10 libras de 6011 1/8 con envío hacia morazan"
+check("mensaje items+envío ES quote request (no debe interceptarse)",
+      main.detect_quote_request(_txt))
+_state = {"conversations": {}, "_meta": {}}
+main._TEST_STATE.capture = []
+_res = main.flete_agent("50499999999", _txt, _state)
+_meta = main.get_conv_meta(_state, "50499999999")
+check("flete_agent devuelve False (pasa el turno al quote flow)", _res is False)
+check("  y guarda flete_ctx con destino MORAZAN",
+      (_meta.get("flete_ctx") or {}).get("destino") == "MORAZAN")
+check("  sin mandar ningún mensaje", len(main._TEST_STATE.capture) == 0)
+main._TEST_STATE.capture = None
+
+check("_expreco_rate_for SPS→MORAZAN existe",
+      main._expreco_rate_for("SAN PEDRO SULA", "MORAZAN") is not None)
+
+# Peso estimado del pedido
+_lis = [
+    {"name": "ELECTRODO E308L-16 3/32 A.A.", "quantity": 1, "rate": 300, "unit": "LB"},
+    {"name": "ELECTRODO 6011 1/8 A.A.", "quantity": 10, "rate": 51.75, "unit": "LB"},
+]
+check("peso pedido: 1 LB + 10 LB = 11 lbs",
+      abs(main._estimate_order_weight_lbs(_lis) - 11.0) < 0.01)
+_lis2 = [
+    {"name": 'MICROALAMBRE E71T-GS 0.030" 2 LBS A.A.', "quantity": 8, "rate": 298, "unit": "UND"},
+    {"name": "TOBERA MILLER ML-N-M1200C A.A.", "quantity": 2, "rate": 310, "unit": "UND"},
+]
+check("peso pedido: 8 rollos × 2 LBS (peso en nombre) + accesorios = 16 lbs",
+      abs(main._estimate_order_weight_lbs(_lis2) - 16.0) < 0.01)
+
+# flete SOLO (sin items) sigue respondiendo directo
+main._TEST_STATE.capture = []
+_res = main.flete_agent("50499999998", "que vale el envío a morazan 10 libras", _state)
+check("flete solo (sin cotización) sigue respondiendo directo",
+      _res is True and len(main._TEST_STATE.capture) == 1
+      and "Morazan" in main._TEST_STATE.capture[0]["text"])
+main._TEST_STATE.capture = None
+
+
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
 total = len(results)

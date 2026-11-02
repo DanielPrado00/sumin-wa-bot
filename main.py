@@ -102,6 +102,7 @@ QUOTE_APPROVAL_MODE = os.environ.get("QUOTE_APPROVAL_MODE", "on").lower() in {"o
 # customer — they're already trusted, no review needed.
 TRUSTED_NUMBERS: set[str] = {
     "50497041381",   # Daniel Prado (founder)
+    "50433340477",   # Daniel Prado — segundo número (el que usa para hablar con el bot)
     "50431742116",   # Sumin SPS — tablet de mostrador
     "50431740168",   # Sumin Tegucigalpa — tablet de mostrador
     "50431742019",   # Eva Pinzón
@@ -5371,6 +5372,33 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
             log_action("QuoteAgent", "asked_customer_name_open", "")
             return
 
+    # v30.5: pedido que venía "con envío a X" → agregar línea FLETE DE
+    # MERCADERIA con la tarifa Expreco y el peso estimado del pedido.
+    fctx = meta.get("flete_ctx") or {}
+    if fctx:
+        from datetime import timedelta
+        fresh = False
+        try:
+            fresh = datetime.fromisoformat(fctx.get("at", "")) >= datetime.now() - timedelta(minutes=45)
+        except ValueError:
+            pass
+        frow = _expreco_rate_for(fctx.get("origen", ""), fctx.get("destino", "")) if fresh else None
+        if frow:
+            peso = _estimate_order_weight_lbs(line_items)
+            fcalc = calcular_flete(frow, peso if peso > 0 else None)
+            fitem = _find_flete_zoho_item() if fcalc["total"] is not None else None
+            if fitem and fcalc["total"] is not None:
+                line_items.append({
+                    "item_id": fitem["item_id"],
+                    "name": fitem.get("item_name", "FLETE DE MERCADERIA"),
+                    "quantity": 1, "rate": round(float(fcalc["total"]), 2),
+                    "unit": fitem.get("unit", ""),
+                })
+                log_action("QuoteAgent", "flete_added_to_quote",
+                           f"{fctx['destino']} peso={peso} lbs L{fcalc['total']}")
+        meta.pop("flete_ctx", None)
+        save_state(state)
+
     estimate = zoho_create_estimate(customer_name, from_number, line_items)
     if not estimate:
         wa_send(
@@ -5706,6 +5734,38 @@ def _find_flete_zoho_item() -> dict | None:
     return None
 
 
+def _expreco_rate_for(origen: str, destino: str) -> dict | None:
+    """Lookup directo de la fila CAJA por origen+destino exactos."""
+    for r in _load_expreco_rates():
+        if r["origen"] == origen and r["destino"] == destino and r["encomienda"] == "CAJA":
+            return r
+    return None
+
+
+def _estimate_order_weight_lbs(line_items: list) -> float:
+    """v30.5: peso estimado del pedido para calcular el flete.
+    LB → qty directo; KG → ×2.20462; peso en el nombre (rollos/cajas) →
+    qty × peso; CAJA sin peso en nombre → default por alloy; UND sin peso
+    (accesorios) → 0 (no pesan para la tarifa base)."""
+    total = 0.0
+    for li in line_items:
+        unit = _normalize_unit(li.get("unit", ""))
+        qty  = float(li.get("quantity") or 0)
+        name = li.get("name", "") or ""
+        m = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:lbs?|libras?)\b", name, re.IGNORECASE)
+        if unit == "LB":
+            total += qty
+        elif unit == "KG":
+            total += qty * 2.20462
+        elif m:
+            total += qty * float(m.group(1))
+        elif unit == "CAJA":
+            bw = _detect_box_weight_lb(name)
+            if bw:
+                total += qty * bw
+    return round(total, 1)
+
+
 def flete_agent(from_number: str, text: str, state: dict) -> bool:
     """Responde preguntas de flete Expreco de forma determinística (sin LLM).
     Corre ANTES de los flows pendientes para que una pregunta de envío no sea
@@ -5714,6 +5774,28 @@ def flete_agent(from_number: str, text: str, state: dict) -> bool:
     if not q:
         return False
     meta = get_conv_meta(state, from_number)
+
+    # v30.5 (bug 02-nov): mensaje con ITEMS a cotizar + "con envío a X" — NO
+    # interceptar (el flete se tragaba la cotización entera y tomaba el peso
+    # de la caja como peso del envío). Guardar contexto y dejar que el quote
+    # flow agregue la línea FLETE DE MERCADERIA con el peso real del pedido.
+    # La detección de cotización se evalúa SIN la parte del flete (keyword,
+    # destino y su peso), para que "que vale el envío a X 10 libras" solo
+    # no cuente como cotización.
+    _residual = _FLETE_KEYWORD_RE.sub(" ", text or "")
+    _residual = _FLETE_WEIGHT_RE.sub(" ", _residual, count=1)
+    _residual = _flete_norm(_residual)
+    if q["row"] is not None:
+        for _tok in _flete_norm(q["row"]["destino"]).split():
+            _residual = re.sub(rf"\b{re.escape(_tok)}\b", " ", _residual)
+    if detect_quote_request(_residual.lower()):
+        if q["row"] is not None:
+            meta["flete_ctx"] = {"origen": q["row"]["origen"],
+                                 "destino": q["row"]["destino"],
+                                 "at": datetime.now().isoformat()}
+            save_state(state)
+            log_action("Flete", "ctx_stashed_for_quote", q["row"]["destino"])
+        return False
     if q["row"] is None:
         wa_send(from_number,
                 "Para el flete encontré varios destinos posibles: "
