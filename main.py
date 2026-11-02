@@ -5953,6 +5953,116 @@ def _try_add_flete_to_pending(from_number: str, text: str, state: dict) -> bool:
     return True
 
 
+# ─── COSTO / VALORACIÓN DE INVENTARIO (v30.9 — SOLO Daniel founder) ─────────
+# Daniel (y SOLO el 50497041381) puede consultar el COSTO de un producto:
+# últimas entradas del proveedor (fecha, cantidad, precio unitario, factura)
+# leídas de las facturas de compra (bills) de Zoho Books. NUNCA responder
+# esto a ningún otro número — es información interna de márgenes.
+
+_COST_KEYWORD_RE = re.compile(
+    r"\b(costos?|valoracion|valoración|nos\s+lleg[oó]|nos\s+cost[oó]"
+    r"|a\s+c[oó]mo\s+nos|cu[aá]nto\s+nos|precio\s+de\s+compra)\b", re.IGNORECASE)
+_BILL_CACHE: dict = {"list": None, "expires": 0.0, "details": {}}
+
+
+def _item_purchase_history(item_id: str, max_entries: int = 3,
+                           max_bills: int = 30) -> list[dict]:
+    """Últimas entradas (compras) de un item, escaneando las facturas de
+    compra más recientes. Detalles de bill cacheados (son inmutables)."""
+    token = get_zoho_access_token()
+    if not token or not ZOHO_ORG_ID or not item_id:
+        return []
+    headers = {"Authorization": f"Zoho-oauthtoken {token}"}
+    now = time.time()
+    if _BILL_CACHE["list"] is None or now > _BILL_CACHE["expires"]:
+        try:
+            r = httpx.get("https://www.zohoapis.com/books/v3/bills",
+                          params={"organization_id": ZOHO_ORG_ID, "per_page": max_bills},
+                          headers=headers, timeout=12)
+            bills = r.json().get("bills", []) if r.status_code == 200 else []
+        except Exception as e:
+            log_action("ZohoAPI", "bills_list_error", str(e))
+            bills = []
+        bills.sort(key=lambda b: b.get("date", ""), reverse=True)
+        _BILL_CACHE["list"] = bills
+        _BILL_CACHE["expires"] = now + 1800
+    out = []
+    for b in _BILL_CACHE["list"][:max_bills]:
+        bid = b.get("bill_id", "")
+        det = _BILL_CACHE["details"].get(bid)
+        if det is None:
+            try:
+                rd = httpx.get(f"https://www.zohoapis.com/books/v3/bills/{bid}",
+                               params={"organization_id": ZOHO_ORG_ID},
+                               headers=headers, timeout=10)
+                det = rd.json().get("bill", {}) if rd.status_code == 200 else {}
+            except Exception:
+                det = {}
+            _BILL_CACHE["details"][bid] = det
+        for li in det.get("line_items", []):
+            if li.get("item_id") == item_id:
+                out.append({
+                    "date": det.get("date", ""),
+                    "vendor": det.get("vendor_name", ""),
+                    "qty": float(li.get("quantity") or 0),
+                    "rate": float(li.get("rate") or 0),
+                    "currency": det.get("currency_code", "HNL"),
+                    "bill_number": det.get("bill_number", ""),
+                })
+        if len(out) >= max_entries:
+            break
+    return out[:max_entries]
+
+
+def cost_agent(from_number: str, text: str, state: dict) -> bool:
+    """Consulta interna de costos — exclusiva del número founder de Daniel."""
+    if from_number != DANIEL_PHONE:
+        return False
+    if not text or not _COST_KEYWORD_RE.search(text):
+        return False
+    query = _COST_KEYWORD_RE.sub(" ", text)
+    query = re.sub(r"\b(cu[aá]l\s+es|cu[aá]nto|las\s+[uú]ltimas|veces|fechas|"
+                   r"el\s+proveedor|proveedor|inventario|d[ií]game|decime|dame)\b",
+                   " ", query, flags=re.IGNORECASE).strip()
+    catalog = fetch_zoho_catalog()
+    item = match_product_to_catalog(query, catalog) if catalog else None
+    if not item:
+        wa_send(from_number,
+                "¿De qué producto querés el costo? No matcheé ninguno del catálogo "
+                f"con '{query[:60]}'.")
+        log_action("CostAgent", "no_match", query[:80])
+        return True
+    hist = _item_purchase_history(item.get("item_id", ""))
+    name  = item.get("item_name", "")
+    stock = item.get("stock_on_hand", "")
+    venta = float(item.get("rate") or 0)
+    lines = [f"🔒 *{name}* — interno"]
+    if hist:
+        lines.append("Últimas entradas del proveedor:")
+        for h in hist:
+            cur = {"USD": "dólares", "HNL": "lempiras", "": "lempiras"}.get(
+                h["currency"], h["currency"])
+            lines.append(f"• {h['date']} — {h['vendor']} — {h['qty']:g} und a "
+                         f"{h['rate']:,.2f} {cur} cada una ({h['bill_number']})")
+    else:
+        lines.append("No encontré entradas de este item en las últimas 30 facturas "
+                     "de compra de Zoho.")
+    if venta > 0:
+        lines.append(f"Venta: {venta:,.2f} lempiras + ISV = "
+                     f"{venta * 1.15:,.2f} lempiras. Stock: {stock}.")
+    msg = "\n".join(lines)
+    wa_send(from_number, msg)
+    log_action("CostAgent", "answered", f"{name[:50]} entradas={len(hist)}")
+    if from_number not in state["conversations"]:
+        state["conversations"][from_number] = []
+    history = state["conversations"][from_number]
+    history.append({"role": "user", "content": text})
+    history.append({"role": "assistant", "content": msg})
+    state["conversations"][from_number] = history[-20:]
+    save_state(state)
+    return True
+
+
 def orchestrate(message_data: dict):
     # v30.3: números internos (Daniel/equipo) no esperan el batching de 10s —
     # respuesta inmediata en modo asistente.
@@ -6062,6 +6172,11 @@ def orchestrate(message_data: dict):
         # v30.3: FLETE Expreco — "agregar flete" a la cotización pendiente, y
         # preguntas de envío/flete respondidas determinísticamente ANTES de que
         # los flows pendientes (nombre de cliente, confirmación) se las traguen.
+        # v30.9: consultas de COSTO (solo Daniel founder) — antes de todo
+        # para que no caigan en el flow de cotización.
+        if cost_agent(from_number, text, state):
+            return
+
         if _try_add_flete_to_pending(from_number, text, state):
             return
         if flete_agent(from_number, text, state):

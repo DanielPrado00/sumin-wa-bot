@@ -527,6 +527,45 @@ check("transcript real 10:33 → los TRES diámetros en el prefilter",
       len(_top) == 3)
 
 
+# ─── 10. Cost agent — solo Daniel founder (v30.9) ──────────────────────────
+section("10. Cost agent (v30.9)")
+
+_state_c = {"conversations": {}, "_meta": {}}
+main._TEST_STATE.capture = []
+
+# Gate de número: otro número con la palabra 'costo' NO dispara (ni toca red)
+check("otro número trusted (3334-0477) NO accede a costos",
+      main.cost_agent("50433340477", "cual es el costo del e71t-gs 10 lbs", _state_c) is False)
+check("cliente random NO accede a costos",
+      main.cost_agent("50412345678", "costo del 6011", _state_c) is False)
+check("Daniel SIN palabra de costo NO dispara (sigue flujo normal)",
+      main.cost_agent("50497041381", "que vale el tungsteno 1/8", _state_c) is False)
+check("keywords: 'a cuánto nos llegó' dispara el regex",
+      bool(main._COST_KEYWORD_RE.search("a cuánto nos llegó el alambre")))
+check("keywords: 'valoración' dispara",
+      bool(main._COST_KEYWORD_RE.search("según la valoración de inventario")))
+
+# Flujo completo con red mockeada
+_orig = (main.fetch_zoho_catalog, main.match_product_to_catalog, main._item_purchase_history)
+main.fetch_zoho_catalog = lambda: [{"item_id": "X1", "item_name": 'MICROALAMBRE E71T-GS 0.030" 10 LBS', "rate": 1045.44, "unit": "ROLLO", "stock_on_hand": 797}]
+main.match_product_to_catalog = lambda q, c, requested_unit="": c[0]
+main._item_purchase_history = lambda item_id, max_entries=3, max_bills=30: [
+    {"date": "2026-09-14", "vendor": "Inwelt", "qty": 500, "rate": 27.8, "currency": "USD", "bill_number": "BILL-0012"},
+    {"date": "2026-06-02", "vendor": "Inwelt", "qty": 300, "rate": 26.5, "currency": "USD", "bill_number": "BILL-0007"},
+]
+try:
+    ok = main.cost_agent("50497041381", "cual es el costo del alambre e71t-gs de 10 libras", _state_c)
+    _msg = main._TEST_STATE.capture[-1]["text"] if main._TEST_STATE.capture else ""
+    check("Daniel + 'costo' → responde", ok is True)
+    check("  con las entradas del proveedor y moneda",
+          "2026-09-14" in _msg and "27.80 dólares" in _msg and "BILL-0012" in _msg)
+    check("  marcado como interno", "interno" in _msg)
+    check("  con precio de venta y stock", "1,045.44" in _msg and "797" in _msg)
+finally:
+    main.fetch_zoho_catalog, main.match_product_to_catalog, main._item_purchase_history = _orig
+    main._TEST_STATE.capture = None
+
+
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
 total = len(results)
