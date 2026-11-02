@@ -585,6 +585,8 @@ try:
     main.match_product_to_catalog = lambda q, c, requested_unit="": (
         _cat2[0] if "460" in q else _cat2[1])
     main._item_purchase_history = lambda item_id, max_entries=3, max_bills=30, vendor_name="": []
+    main._item_po_history = lambda item_id, max_entries=3, max_pos=30: [
+        {"date": "2026-05-12", "vendor": "SPEED PAN", "qty": 200, "rate": 14.2, "currency": "USD", "po_number": "OC-0050", "status": "facturada"}]
     main._TEST_STATE.capture = []
     ok3 = main.cost_agent("50497041381", "cual es el costo de la antorcha CA-460 y el maneral safecut", _state_c)
     _msg3 = main._TEST_STATE.capture[-1]["text"] if main._TEST_STATE.capture else ""
@@ -593,6 +595,7 @@ try:
 finally:
     main.fetch_zoho_catalog, main.match_product_to_catalog, main._item_purchase_history = _orig
     main.extract_items_for_quote = _orig_extract
+    main._item_po_history = lambda *a, **k: []
     main._TEST_STATE.capture = None
 
 

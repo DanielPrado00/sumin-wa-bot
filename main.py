@@ -6034,6 +6034,63 @@ def _is_cost_followup(text: str) -> bool:
     return bool(t) and len(t) <= 45 and bool(re.search(r"\d|mm\b|lbs?\b|libras?\b", t, re.IGNORECASE))
 
 
+_PO_CACHE: dict = {"list": None, "expires": 0.0, "details": {}}
+_PO_STATUS_ES = {"draft": "borrador", "open": "abierta", "billed": "facturada",
+                 "closed": "cerrada", "partially_billed": "parcialmente facturada",
+                 "cancelled": "cancelada"}
+
+
+def _item_po_history(item_id: str, max_entries: int = 3,
+                     max_pos: int = 30) -> list[dict]:
+    """v30.12: últimas ÓRDENES DE COMPRA que incluyen el item — fallback
+    cuando no hay factura (bills) registrada. SUMIN registra los pedidos de
+    importación como OC y la bill a veces llega meses después o nunca."""
+    token = get_zoho_access_token()
+    if not token or not ZOHO_ORG_ID or not item_id:
+        return []
+    headers = {"Authorization": f"Zoho-oauthtoken {token}"}
+    now = time.time()
+    if _PO_CACHE["list"] is None or now > _PO_CACHE["expires"]:
+        try:
+            r = httpx.get("https://www.zohoapis.com/books/v3/purchaseorders",
+                          params={"organization_id": ZOHO_ORG_ID, "per_page": max_pos},
+                          headers=headers, timeout=12)
+            pos = r.json().get("purchaseorders", []) if r.status_code == 200 else []
+        except Exception as e:
+            log_action("ZohoAPI", "po_list_error", str(e))
+            pos = []
+        pos.sort(key=lambda p: p.get("date", ""), reverse=True)
+        _PO_CACHE["list"] = pos
+        _PO_CACHE["expires"] = now + 1800
+    out = []
+    for p in _PO_CACHE["list"][:max_pos]:
+        pid = p.get("purchaseorder_id", "")
+        det = _PO_CACHE["details"].get(pid)
+        if det is None:
+            try:
+                rd = httpx.get(f"https://www.zohoapis.com/books/v3/purchaseorders/{pid}",
+                               params={"organization_id": ZOHO_ORG_ID},
+                               headers=headers, timeout=10)
+                det = rd.json().get("purchaseorder", {}) if rd.status_code == 200 else {}
+            except Exception:
+                det = {}
+            _PO_CACHE["details"][pid] = det
+        for li in det.get("line_items", []):
+            if li.get("item_id") == item_id:
+                out.append({
+                    "date": det.get("date", ""),
+                    "vendor": det.get("vendor_name", ""),
+                    "qty": float(li.get("quantity") or 0),
+                    "rate": float(li.get("rate") or 0),
+                    "currency": det.get("currency_code", "USD"),
+                    "po_number": det.get("purchaseorder_number", ""),
+                    "status": _PO_STATUS_ES.get(det.get("status", ""), det.get("status", "")),
+                })
+        if len(out) >= max_entries:
+            break
+    return out[:max_entries]
+
+
 def cost_agent(from_number: str, text: str, state: dict) -> bool:
     """Consulta interna de costos — exclusiva del número founder de Daniel."""
     if from_number != DANIEL_PHONE:
@@ -6104,7 +6161,18 @@ def cost_agent(from_number: str, text: str, state: dict) -> bool:
                 lines.append(f"• {h['date']} — {h['vendor']} — {h['qty']:g} und a "
                              f"{h['rate']:,.2f} {cur} cada una ({h['bill_number']})")
         else:
-            lines.append("• Sin entradas en las últimas 30 facturas de compra.")
+            # v30.12: sin bill → buscar en órdenes de compra (precio de orden)
+            po_hist = _item_po_history(item.get("item_id", ""))
+            if po_hist:
+                lines.append("Sin factura registrada; últimas órdenes de compra:")
+                for h in po_hist:
+                    cur = {"USD": "dólares", "HNL": "lempiras", "": "lempiras"}.get(
+                        h["currency"], h["currency"])
+                    lines.append(f"• {h['date']} — {h['vendor']} — {h['qty']:g} und a "
+                                 f"{h['rate']:,.2f} {cur} cada una "
+                                 f"({h['po_number']}, {h['status']})")
+            else:
+                lines.append("• Sin entradas en facturas ni órdenes de compra recientes.")
         if venta > 0:
             lines.append(f"Venta: {venta:,.2f} lempiras + ISV = "
                          f"{venta * 1.15:,.2f} lempiras. Stock: {stock}.")
