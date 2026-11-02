@@ -604,6 +604,25 @@ finally:
     main._TEST_STATE.capture = None
 
 
+# ─── 11. Tabla de costos por proveedor (v30.14) ─────────────────────────────
+section("11. Tabla por proveedor (v30.14)")
+
+_orig_vendors = main._fetch_vendors
+main._fetch_vendors = lambda: [
+    {"contact_id": "V1", "contact_name": "HANKOOK WELDTEK CO. LTD", "company_name": "HANKOOK WELDTEK CO. LTD"},
+    {"contact_id": "V2", "contact_name": "NINGBO KIMPIN INDUSTRIAL PTE LTD", "company_name": ""},
+]
+try:
+    vid, vname = main._match_vendor_in_text("costos de los microalambres que vienen de hankook")
+    check("detecta HANKOOK en la frase", vid == "V1" and "HANKOOK" in vname)
+    vid2, _ = main._match_vendor_in_text("cual es el costo del microalambre e71t-gs 10 lbs")
+    check("sin proveedor mencionado → no dispara tabla", vid2 is None)
+    vid3, _ = main._match_vendor_in_text("costos de kimpin")
+    check("detecta KIMPIN", vid3 == "V2")
+finally:
+    main._fetch_vendors = _orig_vendors
+
+
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
 total = len(results)

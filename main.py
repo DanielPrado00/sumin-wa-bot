@@ -6129,6 +6129,113 @@ def _item_po_history(item_id: str, max_entries: int = 3,
     return out[:max_entries]
 
 
+_VENDOR_CACHE: dict = {"list": None, "expires": 0.0}
+# Palabras de producto que NUNCA son proveedor (para no confundir familia con vendor)
+_VENDOR_EXCLUDE_TOKENS = {
+    "MICROALAMBRE", "MICROALAMBRES", "ALAMBRE", "ALAMBRES", "ELECTRODO",
+    "ELECTRODOS", "BOQUILLA", "BOQUILLAS", "TOBERA", "TOBERAS", "DIFUSOR",
+    "DIFUSORES", "ANTORCHA", "ANTORCHAS", "MANERAL", "MANERALES", "REGULADOR",
+    "REGULADORES", "ROLLO", "ROLLOS", "CAJA", "CAJAS", "TUNGSTENO",
+    "TUNGSTENOS", "VARILLA", "VARILLAS", "CARETA", "CARETAS", "PROVEEDOR",
+    "VIENEN", "VIENE", "TABLA", "TABLITA", "TODOS", "TODAS", "LIBRAS",
+}
+
+
+def _fetch_vendors() -> list:
+    token = get_zoho_access_token()
+    if not token or not ZOHO_ORG_ID:
+        return []
+    now = time.time()
+    if _VENDOR_CACHE["list"] is None or now > _VENDOR_CACHE["expires"]:
+        try:
+            r = httpx.get("https://www.zohoapis.com/books/v3/contacts",
+                          params={"organization_id": ZOHO_ORG_ID,
+                                  "contact_type": "vendor", "per_page": 200},
+                          headers={"Authorization": f"Zoho-oauthtoken {token}"},
+                          timeout=12)
+            _VENDOR_CACHE["list"] = (r.json().get("contacts", [])
+                                     if r.status_code == 200 else [])
+        except Exception as e:
+            log_action("ZohoAPI", "vendors_error", str(e)[:120])
+            _VENDOR_CACHE["list"] = []
+        _VENDOR_CACHE["expires"] = now + 3600
+    return _VENDOR_CACHE["list"]
+
+
+def _match_vendor_in_text(text: str):
+    """Busca un proveedor mencionado en la consulta ('... que vienen de
+    Hankook'). Devuelve (vendor_id, vendor_name) o (None, None)."""
+    tnorm = _flete_norm(text)
+    tokens = [t for t in tnorm.split()
+              if len(t) >= 5 and t not in _VENDOR_EXCLUDE_TOKENS]
+    if not tokens:
+        return None, None
+    for v in _fetch_vendors():
+        vnorm = _flete_norm(v.get("contact_name", "") + " " + v.get("company_name", ""))
+        vwords = set(w for w in vnorm.split() if len(w) >= 5)
+        for t in tokens:
+            if t in vwords:
+                return v.get("contact_id", ""), v.get("contact_name", "")
+    return None, None
+
+
+def _vendor_cost_table(vendor_id: str, filter_tokens: set,
+                       max_rows: int = 12) -> list[str]:
+    """Tabla de costos: líneas de las facturas del proveedor, filtradas por
+    familia de producto, agrupadas por item (entrada más reciente primero)."""
+    token = get_zoho_access_token()
+    if not token or not ZOHO_ORG_ID or not vendor_id:
+        return []
+    headers = {"Authorization": f"Zoho-oauthtoken {token}"}
+    now = time.time()
+    cache_key = f"list::{vendor_id}::"
+    cached = _BILL_CACHE.get(cache_key)
+    if cached is None or now > cached.get("expires", 0):
+        try:
+            r = httpx.get("https://www.zohoapis.com/books/v3/bills",
+                          params={"organization_id": ZOHO_ORG_ID,
+                                  "vendor_id": vendor_id, "per_page": 200},
+                          headers=headers, timeout=12)
+            bills = r.json().get("bills", []) if r.status_code == 200 else []
+        except Exception:
+            bills = []
+        bills.sort(key=lambda b: b.get("date", ""), reverse=True)
+        cached = {"bills": bills, "expires": now + 1800}
+        _BILL_CACHE[cache_key] = cached
+    rows_by_item: dict = {}
+    for b in cached["bills"][:20]:
+        bid = b.get("bill_id", "")
+        det = _BILL_CACHE["details"].get(bid)
+        if det is None:
+            try:
+                rd = httpx.get(f"https://www.zohoapis.com/books/v3/bills/{bid}",
+                               params={"organization_id": ZOHO_ORG_ID},
+                               headers=headers, timeout=10)
+                det = rd.json().get("bill", {}) if rd.status_code == 200 else {}
+            except Exception:
+                det = {}
+            _BILL_CACHE["details"][bid] = det
+        cur = {"USD": "USD", "HNL": "L", "": "L"}.get(
+            det.get("currency_code", ""), det.get("currency_code", ""))
+        for li in det.get("line_items", []):
+            nm = li.get("name", "") or ""
+            if filter_tokens:
+                nm_norm = _flete_norm(nm)
+                if not any(t in nm_norm for t in filter_tokens):
+                    continue
+            entry = (f"{det.get('date', '')}: {float(li.get('quantity') or 0):g} und a "
+                     f"{float(li.get('rate') or 0):,.2f} {cur}")
+            rows_by_item.setdefault(nm, []).append(entry)
+    lines = []
+    for nm in sorted(rows_by_item):
+        lines.append(f"• *{nm}*")
+        for e in rows_by_item[nm][:2]:
+            lines.append(f"   {e}")
+        if len(lines) >= max_rows * 3:
+            break
+    return lines
+
+
 def cost_agent(from_number: str, text: str, state: dict) -> bool:
     """Consulta interna de costos — exclusiva del número founder de Daniel."""
     if from_number != DANIEL_PHONE:
@@ -6160,6 +6267,41 @@ def cost_agent(from_number: str, text: str, state: dict) -> bool:
     meta["cost_mode_at"] = datetime.now().isoformat()
     meta["last_cost_query"] = query
     save_state(state)
+    # v30.14: consulta por PROVEEDOR ('costos de los microalambres que vienen
+    # de Hankook') → tabla de las facturas de ese proveedor filtrada por
+    # familia de producto.
+    v_id, v_name = _match_vendor_in_text(query)
+    if v_id:
+        fam_norm = _flete_norm(query)
+        fam_tokens = set()
+        for t in fam_norm.split():
+            if t in _flete_norm(v_name).split() or len(t) < 5:
+                continue
+            if t in {"VIENEN", "VIENE", "PROVEEDOR", "TABLA", "TABLITA", "TODOS", "TODAS"}:
+                continue
+            fam_tokens.add(t.rstrip("S"))  # microalambres → microalambre
+        tbl = _vendor_cost_table(v_id, fam_tokens)
+        if tbl:
+            msg = (f"🔒 Costos de *{v_name}*"
+                   + (f" — {', '.join(sorted(fam_tokens)).lower()}" if fam_tokens else "")
+                   + " (precios de factura):\n" + "\n".join(tbl)
+                   + "\n\n_(interno — solo este número)_")
+            wa_send(from_number, msg)
+            log_action("CostAgent", "vendor_table", f"{v_name} rows={len(tbl)}")
+            if from_number not in state["conversations"]:
+                state["conversations"][from_number] = []
+            h = state["conversations"][from_number]
+            h.append({"role": "user", "content": text})
+            h.append({"role": "assistant", "content": msg})
+            state["conversations"][from_number] = h[-20:]
+            save_state(state)
+            return True
+        wa_send(from_number,
+                f"No encontré líneas que matcheen en las facturas de {v_name}. "
+                "¿Querés la tabla completa del proveedor? Decime 'todos los costos de "
+                f"{v_name.split()[0].title()}'.")
+        return True
+
     catalog = fetch_zoho_catalog()
     if not catalog:
         wa_send(from_number, "No pude cargar el catálogo de Zoho ahorita. Reintentá en un momento.")
