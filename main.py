@@ -394,6 +394,18 @@ Si ves [INVENTARIO ZOHO — DATO REAL] con precio en el contexto:
 → Ejemplo: "El precio es L517.50 por caja de 10 lbs (ISV incluido)."
 Solo redirigís al teléfono (+504 3334-0477) si NO hay datos de Zoho o el producto no está en catálogo.
 
+━━━ v30.6 FORMATO AL ESCRIBIR PRECIOS AL CLIENTE (regla de Daniel, nov-2026) ━━━
+Al CLIENTE los precios se escriben con el MONTO seguido de la palabra
+"lempiras" y la unidad EN PALABRAS:
+  • por unidad: "322 lempiras cada uno"
+  • por libra:  "51.75 lempiras cada libra"
+  • por rollo:  "1,045.44 lempiras cada rollo"
+  • totales:    "en 10 libras le saldría 517.50 lempiras"
+NUNCA escribas al cliente "L322", "L.322", "/UND", "/lb", "c/u" ni "L"
+pegada al número. Las tablas internas de este prompt usan "L" por
+brevedad — son DATOS de referencia, no el formato de salida.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 2. ELECTRODOS:
    Preguntar: tipo, diámetro y tamaño de caja. Los electrodos se venden por lb suelta o en cajas de 10 lbs / 50 lbs.
    Si ves [INVENTARIO ZOHO] con precio, úsalo directamente.
@@ -5255,7 +5267,7 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                         rate_with_isv = round(float(o.get("rate", 0)) * 1.15, 2)
                         unit_label = o.get("unit") or "UND"
                         msg_parts.append(
-                            f"  • {o['item_name']} — *L{rate_with_isv}/{unit_label}* (con ISV)"
+                            f"  • {o['item_name']} — *{rate_with_isv:,.2f} lempiras {_unit_words(unit_label)}* (con ISV)"
                         )
                 msg_parts.append(
                     "\n\n¿Le sirve alguna? Confírmeme cuál y la cantidad para "
@@ -5319,7 +5331,7 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                         rate_with_isv = round(float(o.get("rate", 0)) * 1.15, 2)
                         unit_label = o.get("unit") or "UND"
                         warning_lines.append(
-                            f"      - {o['item_name']} (L{rate_with_isv}/{unit_label})"
+                            f"      - {o['item_name']} ({rate_with_isv:,.2f} lempiras {_unit_words(unit_label)})"
                         )
             warning_text = "\n".join(warning_lines)
             # Guardar el warning en pending_quote para incluirlo cuando se mande la cotización final
@@ -5449,7 +5461,7 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
             # Console down — fall back to direct send so the customer is not stuck.
             log_action("QuoteAgent", "approval_submit_failed_fallback_direct", est_number)
             lines_txt = "\n".join(
-                f"  • {li['quantity']} x {li['name']} — L{li['rate'] * li['quantity'] * 1.15:,.2f} c/ISV"
+                f"  • {li['quantity']:g} x {li['name']} — {li['rate'] * li['quantity'] * 1.15:,.2f} lempiras (con ISV)"
                 for li in line_items
             )
             wa_send(
@@ -5471,7 +5483,7 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
 
     # ─── DIRECT MODE (legacy, only when QUOTE_APPROVAL_MODE=off) ────────
     lines_txt = "\n".join(
-        f"  • {li['quantity']} x {li['name']} — L{li['rate'] * li['quantity'] * 1.15:,.2f} c/ISV"
+        f"  • {li['quantity']:g} x {li['name']} — {li['rate'] * li['quantity'] * 1.15:,.2f} lempiras (con ISV)"
         for li in line_items
     )
     summary = (
@@ -5704,26 +5716,33 @@ def _detect_flete_query(text: str) -> dict | None:
             "peso_original": peso_original, "origen": origen}
 
 
+def _unit_words(unit: str) -> str:
+    """v30.6: unidad en palabras para el formato de precios de Daniel."""
+    return {"UND": "cada uno", "LB": "cada libra", "ROLLO": "cada rollo",
+            "CAJA": "cada caja", "KG": "cada kilo"}.get(
+        _normalize_unit(unit or ""), "cada uno")
+
+
 def calcular_flete(row: dict, peso_lbs: float | None, peso_original: str = "") -> dict:
     """Arma el cálculo y el mensaje. total=None cuando falta el peso (tipo 1)."""
     header = f"🚚 Flete Expreco {row['origen'].title()} → {row['destino'].title()} (caja)"
     if row["tipo"] == 3:
         total = row["valor_fijo"]
         return {"total": total,
-                "mensaje": f"{header}\nTarifa fija: *L{total:,.2f}* (antes de ISV)"}
+                "mensaje": f"{header}\nTarifa fija: *{total:,.2f} lempiras* (antes de ISV)"}
     base, pb, exc = row["valor_base"], row["peso_base_lbs"], row["valor_exceso_lb"]
     if peso_lbs is None:
         return {"total": None,
-                "mensaje": (f"{header}\nBase (hasta {pb:g} lbs): L{base:,.2f} + "
-                            f"L{exc:,.2f} por libra adicional.\n"
+                "mensaje": (f"{header}\nBase (hasta {pb:g} lbs): {base:,.2f} lempiras + "
+                            f"{exc:,.2f} lempiras por libra adicional.\n"
                             f"¿Cuántas libras pesa el envío?")}
     extra_lbs = max(0.0, peso_lbs - pb)
     total = round(base + extra_lbs * exc, 2)
     peso_txt = f"{peso_original} ≈ {peso_lbs:g} lbs" if peso_original else f"{peso_lbs:g} lbs"
-    lines = [header, f"Peso: {peso_txt}", f"Base (hasta {pb:g} lbs): L{base:,.2f}"]
+    lines = [header, f"Peso: {peso_txt}", f"Base (hasta {pb:g} lbs): {base:,.2f} lempiras"]
     if extra_lbs > 0:
-        lines.append(f"Exceso: {extra_lbs:g} lbs × L{exc:,.2f} = L{extra_lbs * exc:,.2f}")
-    lines.append(f"*Total: L{total:,.2f}* (antes de ISV)")
+        lines.append(f"Exceso: {extra_lbs:g} lbs × {exc:,.2f} = {extra_lbs * exc:,.2f} lempiras")
+    lines.append(f"*Total: {total:,.2f} lempiras* (antes de ISV)")
     return {"total": total, "mensaje": "\n".join(lines)}
 
 
