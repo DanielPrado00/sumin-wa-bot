@@ -619,6 +619,14 @@ try:
     check("sin proveedor mencionado → no dispara tabla", vid2 is None)
     vid3, _ = main._match_vendor_in_text("costos de kimpin")
     check("detecta KIMPIN", vid3 == "V2")
+    # v30.16: proveedor de palabras cortas → match por frase completa
+    main._fetch_vendors = lambda: [
+        {"contact_id": "V3", "contact_name": "LIN AN DA YANG", "company_name": ""}]
+    vid4, _ = main._match_vendor_in_text("costos de los microalambres lin an da yang")
+    check("v30.16: detecta LIN AN DA YANG (frase completa, palabras cortas)",
+          vid4 == "V3")
+    vid5, _ = main._match_vendor_in_text("costo del microalambre e71t-gs 33 lbs")
+    check("v30.16: sin mención de Lin An Da Yang → no matchea", vid5 is None)
 finally:
     main._fetch_vendors = _orig_vendors
 

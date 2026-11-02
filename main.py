@@ -6029,6 +6029,11 @@ def _bill_landed_unit(det: dict, li: dict):
         if alloc and sub > 0 and ex:
             line_total = rate * qty
             landed = round((rate + (line_total / sub) * alloc / qty) * ex, 2)
+        elif not alloc and not _BILL_KEYS_LOGGED["done"]:
+            # No encontramos los cargos bajo las llaves conocidas — loguear la
+            # estructura real de la bill UNA vez para afinar el parser.
+            _BILL_KEYS_LOGGED["done"] = True
+            log_action("ZohoAPI", "bill_detail_keys", ",".join(sorted(det.keys()))[:300])
         return lcy, landed
     except Exception:
         return None, None
@@ -6206,21 +6211,35 @@ def _fetch_vendors() -> list:
     return _VENDOR_CACHE["list"]
 
 
+_VENDOR_SUFFIX_WORDS = {"CO", "LTD", "LTDA", "CORP", "CORPORATION", "INC", "PTE",
+                        "GMBH", "SA", "S", "A", "DE", "R", "L", "CV", "LLC",
+                        "COMPANY", "INDUSTRIAL", "INTERNATIONAL", "TECHNOLOGY"}
+
+
 def _match_vendor_in_text(text: str):
     """Busca un proveedor mencionado en la consulta ('... que vienen de
-    Hankook'). Devuelve (vendor_id, vendor_name) o (None, None)."""
-    tnorm = _flete_norm(text)
-    tokens = [t for t in tnorm.split()
-              if len(t) >= 5 and t not in _VENDOR_EXCLUDE_TOKENS]
-    if not tokens:
-        return None, None
+    Hankook', 'microalambres Lin An Da Yang'). Matching: frase completa del
+    nombre (sin sufijos corporativos) o palabra distintiva ≥5 (≥4 como débil).
+    Devuelve (vendor_id, vendor_name) o (None, None)."""
+    tnorm = " " + _flete_norm(text) + " "
+    ttokens = set(tnorm.split())
+    weak = (None, None)
     for v in _fetch_vendors():
-        vnorm = _flete_norm(v.get("contact_name", "") + " " + v.get("company_name", ""))
-        vwords = set(w for w in vnorm.split() if len(w) >= 5)
-        for t in tokens:
-            if t in vwords:
-                return v.get("contact_id", ""), v.get("contact_name", "")
-    return None, None
+        vid, vname = v.get("contact_id", ""), v.get("contact_name", "")
+        cname = _flete_norm(vname)
+        words = [w for w in cname.split()
+                 if w not in _VENDOR_SUFFIX_WORDS and w not in _VENDOR_EXCLUDE_TOKENS]
+        if not words:
+            continue
+        # 1) frase completa del nombre-núcleo ('LIN AN DA YANG')
+        if f" {' '.join(words)} " in tnorm:
+            return vid, vname
+        for w in words:
+            if len(w) >= 5 and w in ttokens:
+                return vid, vname
+            if len(w) == 4 and w in ttokens and weak == (None, None):
+                weak = (vid, vname)
+    return weak
 
 
 def _vendor_cost_table(vendor_id: str, filter_tokens: set,
@@ -6432,10 +6451,26 @@ def cost_agent(from_number: str, text: str, state: dict) -> bool:
         sections.append("\n".join(lines))
 
     if not sections:
-        wa_send(from_number,
-                f"No encontré en el catálogo nada para '{query[:60]}'. "
-                "Puede estar con otro nombre o esa presentación no existe — "
-                "probá con el nombre más completo o el SKU.")
+        # v30.16: en vez de un 'no encontré' seco, sugerir los candidatos del
+        # prefiltro (caso real: 'boquilla SafeCut' tiene varias tallas y el
+        # matcher no puede elegir una sola).
+        cand_names = []
+        try:
+            for it in _prefilter_catalog(_normalize_query_for_search(query), catalog, top_n=5):
+                nm = it.get("item_name", "")
+                if nm:
+                    cand_names.append(nm)
+        except Exception:
+            pass
+        if cand_names:
+            wa_send(from_number,
+                    f"Hay varios posibles para '{query[:50]}' — ¿cuál de estos?\n• "
+                    + "\n• ".join(cand_names[:5]))
+        else:
+            wa_send(from_number,
+                    f"No encontré en el catálogo nada para '{query[:60]}'. "
+                    "Puede estar con otro nombre o esa presentación no existe — "
+                    "probá con el nombre más completo o el SKU.")
         log_action("CostAgent", "no_match", query[:80])
         return True
 
