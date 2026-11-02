@@ -653,6 +653,43 @@ check("sin exchange_rate/cargos → sin estimación (no inventa)",
       _lcy2 is None and _landed2 is None)
 
 
+# ─── 13. Agente interno (v31.0) ─────────────────────────────────────────────
+section("13. Agente interno (v31.0)")
+
+check("números del agente: ambos de Daniel, nadie más",
+      main.INTERNAL_AGENT_NUMBERS == {"50497041381", "50433340477"})
+_t_founder = {t["name"] for t in main._agent_tools_for("50497041381")}
+_t_second  = {t["name"] for t in main._agent_tools_for("50433340477")}
+check("founder tiene las 6 tools (incluye costos y ventas)",
+      _t_founder == {"buscar_items", "costo_item", "tabla_costos_proveedor",
+                     "calcular_flete_expreco", "listar_clientes", "ventas_item"})
+check("segundo número SIN costos/ventas (internas del founder)",
+      _t_second == {"buscar_items", "calcular_flete_expreco", "listar_clientes"})
+check("dispatcher bloquea tool interna desde el segundo número",
+      "exclusiva" in main._dispatch_agent_tool("costo_item", {"producto": "x"},
+                                               "50433340477").get("error", ""))
+check("dispatcher: tool desconocida → error controlado",
+      "desconocida" in main._dispatch_agent_tool("nada", {}, "50497041381").get("error", ""))
+
+# buscar_items con catálogo stub (sin red)
+_orig_fetch2 = main.fetch_zoho_catalog
+main.fetch_zoho_catalog = lambda: [
+    {"item_id": "1", "item_name": "ELECTRODO 6011 1/8 A.A.", "sku": "E1",
+     "unit": "LB", "rate": 45.0, "stock_on_hand": 100, "vendor_name": "INWELCO"}]
+try:
+    _r = main._tool_buscar_items({"query": "electrodo 6011 1/8"})
+    check("buscar_items: nombre, precio con ISV y stock",
+          _r["items"] and _r["items"][0]["precio_con_isv"] == 51.75
+          and _r["items"][0]["stock"] == 100)
+finally:
+    main.fetch_zoho_catalog = _orig_fetch2
+
+# flete tool reutiliza el tarifario real
+_rf = main._tool_flete({"destino": "marcala", "peso_lbs": 8})
+check("tool de flete: Marcala 8 lbs = 194.85 L",
+      abs((_rf.get("total_L_antes_isv") or 0) - 194.85) < 0.01)
+
+
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
 total = len(results)

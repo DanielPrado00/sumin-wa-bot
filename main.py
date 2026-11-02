@@ -5953,6 +5953,302 @@ def _try_add_flete_to_pending(from_number: str, text: str, state: dict) -> bool:
     return True
 
 
+# ─── AGENTE INTERNO TOOL-USE (v31.0 — solo números de Daniel) ───────────────
+# Fase 2 del plan: un agente con herramientas reales reemplaza a sales_agent
+# SOLO para los números de Daniel. Los clientes siguen con el pipeline v30.x.
+# El agente puede componer consultas (ventas por cliente/período, comparar
+# meses, costos, flete, catálogo) llamando tools y viendo los datos reales.
+
+DANIEL_PHONE_2 = "50433340477"   # segundo número de Daniel (habla con el bot)
+INTERNAL_AGENT_NUMBERS = {DANIEL_PHONE, DANIEL_PHONE_2}
+
+_INV_CACHE: dict = {"details": {}}
+
+
+def _tool_buscar_items(args: dict) -> dict:
+    catalog = fetch_zoho_catalog()
+    q = _normalize_query_for_search(args.get("query", "") or "")
+    out = []
+    for it in _prefilter_catalog(q, catalog, top_n=10):
+        rate = float(it.get("rate") or 0)
+        out.append({"item_id": it.get("item_id"), "nombre": it.get("item_name"),
+                    "sku": it.get("sku"), "unidad": it.get("unit"),
+                    "precio_base": rate, "precio_con_isv": round(rate * 1.15, 2),
+                    "stock": it.get("stock_on_hand"),
+                    "proveedor": it.get("vendor_name", "")})
+    return {"items": out}
+
+
+def _tool_costo_item(args: dict) -> dict:
+    producto = args.get("producto", "") or ""
+    catalog = fetch_zoho_catalog()
+    item = match_product_to_catalog(producto, catalog) if catalog else None
+    if not item:
+        cands = [it.get("item_name") for it in
+                 _prefilter_catalog(_normalize_query_for_search(producto), catalog, top_n=5)]
+        return {"error": "sin match único", "candidatos": cands}
+    hist = _item_purchase_history(item.get("item_id", ""),
+                                  vendor_name=item.get("vendor_name", "") or "")
+    po = []
+    if not hist:
+        po = _item_po_history(item.get("item_id", ""))
+        vid = po[0].get("vendor_id", "") if po else ""
+        if vid:
+            hist = _item_purchase_history(item.get("item_id", ""), vendor_id=vid)
+    wac, st, asset = _item_cost_summary(item.get("item_id", ""))
+    return {"item": item.get("item_name"), "entradas_factura": hist,
+            "ordenes_compra": po if not hist else [],
+            "costo_promedio_libros_L": wac, "activo_L": asset, "stock": st,
+            "venta_base_L": float(item.get("rate") or 0)}
+
+
+def _tool_tabla_proveedor(args: dict) -> dict:
+    vid, vname = _match_vendor_in_text(args.get("proveedor", "") or "")
+    if not vid:
+        return {"error": "proveedor no encontrado en Zoho"}
+    toks = {t.rstrip("S") for t in _flete_norm(args.get("filtro", "") or "").split()
+            if len(t) >= 5}
+    return {"proveedor": vname, "tabla": _vendor_cost_table(vid, toks)}
+
+
+def _tool_flete(args: dict) -> dict:
+    origen = "TEGUCIGALPA" if "teguc" in (args.get("origen", "") or "").lower() \
+        else "SAN PEDRO SULA"
+    row, cands = _expreco_match_destino(args.get("destino", "") or "", origen)
+    if row is None:
+        return {"error": "destino no encontrado en tarifario", "candidatos": cands}
+    peso = args.get("peso_lbs")
+    calc = calcular_flete(row, float(peso) if peso else None)
+    return {"detalle": calc["mensaje"], "total_L_antes_isv": calc["total"]}
+
+
+def _tool_listar_clientes(args: dict) -> dict:
+    token = get_zoho_access_token()
+    if not token:
+        return {"error": "sin token Zoho"}
+    try:
+        r = httpx.get("https://www.zohoapis.com/books/v3/contacts",
+                      params={"organization_id": ZOHO_ORG_ID,
+                              "contact_type": "customer",
+                              "contact_name_contains": (args.get("buscar", "") or "")[:50],
+                              "per_page": 15},
+                      headers={"Authorization": f"Zoho-oauthtoken {token}"}, timeout=12)
+        cs = r.json().get("contacts", []) if r.status_code == 200 else []
+    except Exception as e:
+        return {"error": str(e)[:120]}
+    return {"clientes": [{"contact_id": c.get("contact_id"),
+                          "nombre": c.get("contact_name")} for c in cs]}
+
+
+def _tool_ventas_item(args: dict) -> dict:
+    """Ventas (facturas de cliente) de un producto en un rango de fechas,
+    opcionalmente filtrado por cliente. SOLO LECTURA."""
+    token = get_zoho_access_token()
+    if not token:
+        return {"error": "sin token Zoho"}
+    headers = {"Authorization": f"Zoho-oauthtoken {token}"}
+    producto = args.get("producto", "") or ""
+    catalog = fetch_zoho_catalog()
+    q = _normalize_query_for_search(producto)
+    strong = [t for t in _query_tokens(q) if len(t) >= 4][:3]
+    targets = {}
+    for it in _prefilter_catalog(q, catalog, top_n=15):
+        nm = _strip_accents(it.get("item_name", "")).lower()
+        if strong and not all(t in nm for t in strong):
+            continue
+        targets[it.get("item_id")] = it
+    if not targets:
+        for it in _prefilter_catalog(q, catalog, top_n=3):
+            targets[it.get("item_id")] = it
+    if not targets:
+        return {"error": "producto no encontrado en catálogo"}
+
+    params = {"organization_id": ZOHO_ORG_ID, "per_page": 200}
+    if args.get("desde"):
+        params["date_start"] = args["desde"]
+    if args.get("hasta"):
+        params["date_end"] = args["hasta"]
+    if args.get("cliente_id"):
+        params["customer_id"] = args["cliente_id"]
+    invoices, page = [], 1
+    while page <= 3:
+        params["page"] = page
+        try:
+            r = httpx.get("https://www.zohoapis.com/books/v3/invoices",
+                          params=params, headers=headers, timeout=15)
+            data = r.json() if r.status_code == 200 else {}
+        except Exception as e:
+            return {"error": str(e)[:120]}
+        invoices.extend(data.get("invoices", []))
+        if not data.get("page_context", {}).get("has_more_page"):
+            break
+        page += 1
+
+    qty_by_unit: dict = {}
+    monto = 0.0
+    n_match = 0
+    fetched_new = 0
+    truncado = False
+    for inv in invoices:
+        iid = inv.get("invoice_id", "")
+        det = _INV_CACHE["details"].get(iid)
+        if det is None:
+            if fetched_new >= 120:
+                truncado = True
+                break
+            fetched_new += 1
+            try:
+                rd = httpx.get(f"https://www.zohoapis.com/books/v3/invoices/{iid}",
+                               params={"organization_id": ZOHO_ORG_ID},
+                               headers=headers, timeout=10)
+                det = rd.json().get("invoice", {}) if rd.status_code == 200 else {}
+            except Exception:
+                det = {}
+            _INV_CACHE["details"][iid] = det
+        hit = False
+        for li in det.get("line_items", []):
+            if li.get("item_id") in targets:
+                unit = _normalize_unit(li.get("unit", "")) or "UND"
+                qty_by_unit[unit] = qty_by_unit.get(unit, 0.0) + float(li.get("quantity") or 0)
+                monto += float(li.get("item_total") or 0)
+                hit = True
+        if hit:
+            n_match += 1
+    return {"items_considerados": [it.get("item_name") for it in targets.values()][:8],
+            "cantidad_por_unidad": qty_by_unit,
+            "monto_total_L_sin_isv": round(monto, 2),
+            "facturas_con_el_item": n_match,
+            "facturas_revisadas": len(invoices),
+            "resultado_parcial": truncado,
+            "nota": "montos de factura sin ISV; cantidades en la unidad de cada línea"}
+
+
+_AGENT_TOOL_DEFS = [
+    {"name": "buscar_items",
+     "description": "Busca productos en el catálogo de Zoho (nombre, SKU, precio base y con ISV, stock).",
+     "input_schema": {"type": "object", "properties": {
+         "query": {"type": "string"}}, "required": ["query"]}},
+    {"name": "costo_item",
+     "description": "SOLO INTERNO: costo de un producto — últimas entradas del proveedor (facturas u órdenes de compra, FOB y liquidado) y costo promedio en libros.",
+     "input_schema": {"type": "object", "properties": {
+         "producto": {"type": "string"}}, "required": ["producto"]}},
+    {"name": "tabla_costos_proveedor",
+     "description": "SOLO INTERNO: tabla de costos de las facturas de UN proveedor, opcionalmente filtrada por familia de producto.",
+     "input_schema": {"type": "object", "properties": {
+         "proveedor": {"type": "string"}, "filtro": {"type": "string"}},
+         "required": ["proveedor"]}},
+    {"name": "calcular_flete_expreco",
+     "description": "Tarifa de flete Expreco a un destino (caja; base 5 lbs + exceso por libra). Origen San Pedro Sula salvo que se indique Tegucigalpa.",
+     "input_schema": {"type": "object", "properties": {
+         "destino": {"type": "string"}, "peso_lbs": {"type": "number"},
+         "origen": {"type": "string"}}, "required": ["destino"]}},
+    {"name": "listar_clientes",
+     "description": "Busca clientes en Zoho por nombre (para obtener cliente_id). Ej: 'azucarera' lista todas las azucareras.",
+     "input_schema": {"type": "object", "properties": {
+         "buscar": {"type": "string"}}, "required": ["buscar"]}},
+    {"name": "ventas_item",
+     "description": "SOLO INTERNO: cuánto se ha vendido de un producto en un rango de fechas (facturas de venta), opcionalmente de UN cliente (cliente_id de listar_clientes). Para comparar períodos o clientes, llamala varias veces.",
+     "input_schema": {"type": "object", "properties": {
+         "producto": {"type": "string"},
+         "desde": {"type": "string", "description": "YYYY-MM-DD"},
+         "hasta": {"type": "string", "description": "YYYY-MM-DD"},
+         "cliente_id": {"type": "string"}}, "required": ["producto", "desde", "hasta"]}},
+]
+_AGENT_INTERNAL_ONLY_TOOLS = {"costo_item", "tabla_costos_proveedor", "ventas_item"}
+_AGENT_TOOL_FUNCS = {
+    "buscar_items": _tool_buscar_items,
+    "costo_item": _tool_costo_item,
+    "tabla_costos_proveedor": _tool_tabla_proveedor,
+    "calcular_flete_expreco": _tool_flete,
+    "listar_clientes": _tool_listar_clientes,
+    "ventas_item": _tool_ventas_item,
+}
+
+
+def _agent_tools_for(from_number: str) -> list:
+    if from_number == DANIEL_PHONE:
+        return _AGENT_TOOL_DEFS
+    return [t for t in _AGENT_TOOL_DEFS
+            if t["name"] not in _AGENT_INTERNAL_ONLY_TOOLS]
+
+
+def _dispatch_agent_tool(name: str, args: dict, from_number: str) -> dict:
+    fn = _AGENT_TOOL_FUNCS.get(name)
+    if fn is None:
+        return {"error": f"tool desconocida: {name}"}
+    if name in _AGENT_INTERNAL_ONLY_TOOLS and from_number != DANIEL_PHONE:
+        return {"error": "esta herramienta es exclusiva del número founder"}
+    try:
+        return fn(args or {})
+    except Exception as e:
+        log_action("Agent", f"tool_error:{name}", str(e)[:200])
+        return {"error": str(e)[:200]}
+
+
+_AGENT_SYSTEM = """Sos el asistente interno de SUMIN (soldadura, Honduras) para Daniel y su equipo, por WhatsApp.
+
+REGLAS:
+- Dato primero, mensajes cortos. Formato de precios: monto + 'lempiras' + unidad en palabras ('322 lempiras cada uno', '51.75 lempiras cada libra'). Precios al cliente llevan ISV 15%; costos y datos internos se dan tal cual.
+- SOLO LECTURA: tus herramientas no modifican nada en Zoho. NUNCA inventes montos, fechas ni cantidades — si una herramienta no da el dato, decilo y sugerí cómo afinarlo.
+- Para comparaciones ('¿y el mes anterior?', '¿cuál azucarera se lleva más?') llamá las herramientas las veces que haga falta y resumí la comparación.
+- Grupo 'azucareras': clientes con AZUCARERA en el nombre, MÁS 'ENERGIA CHUMBAGUA' (Chumbagua compra bajo Azucarera Chumbagua y Energía Chumbagua). Usá listar_clientes para resolver los ids.
+- ventas_item devuelve montos SIN ISV y puede ser parcial (resultado_parcial=true): si es parcial, decilo.
+- Memoria de la conversación: los mensajes anteriores son contexto válido para seguimientos.
+"""
+
+
+def internal_agent_respond(from_number: str, from_name: str, text: str, state: dict):
+    """v31.0: loop de tool use para los números de Daniel. Fallback a
+    sales_agent si el loop falla."""
+    log_action("Agent", "processing", f"{from_name}: {text[:80]}")
+    if from_number not in state["conversations"]:
+        state["conversations"][from_number] = []
+    history = state["conversations"][from_number]
+    msgs = list(history[-12:]) + [{"role": "user", "content": text}]
+    tools = _agent_tools_for(from_number)
+    system = _AGENT_SYSTEM + f"\nHoy es {datetime.now().strftime('%Y-%m-%d')}."
+    response_text = ""
+    try:
+        for hop in range(8):
+            msg = claude.messages.create(
+                model=SALES_BRAIN_MODEL, max_tokens=6000,
+                thinking={"type": "enabled", "budget_tokens": 3000},
+                system=system, tools=tools, messages=msgs,
+            )
+            if msg.stop_reason == "tool_use":
+                msgs.append({"role": "assistant", "content": msg.content})
+                results = []
+                for block in msg.content:
+                    if getattr(block, "type", "") == "tool_use":
+                        out = _dispatch_agent_tool(block.name, block.input or {}, from_number)
+                        log_action("Agent", f"tool:{block.name}",
+                                   json.dumps(block.input or {}, ensure_ascii=False)[:120])
+                        results.append({"type": "tool_result", "tool_use_id": block.id,
+                                        "content": json.dumps(out, ensure_ascii=False,
+                                                              default=str)[:12000]})
+                msgs.append({"role": "user", "content": results})
+                continue
+            for block in msg.content:
+                if getattr(block, "type", "") == "text":
+                    response_text = block.text
+                    break
+            break
+    except Exception as e:
+        log_action("Agent", "loop_error_fallback_sales", str(e)[:200])
+        sales_agent(from_number, from_name, text, state)
+        return
+    if not response_text:
+        response_text = "No pude completar la consulta — intentá reformularla."
+    wa_send(from_number, response_text)
+    history.append({"role": "user", "content": text})
+    history.append({"role": "assistant", "content": response_text})
+    state["conversations"][from_number] = history[-20:]
+    meta = get_conv_meta(state, from_number)
+    meta["last_active"] = datetime.now().isoformat()
+    save_state(state)
+    log_action("Agent", "sent_response", response_text[:100])
+
+
 # ─── COSTO / VALORACIÓN DE INVENTARIO (v30.9 — SOLO Daniel founder) ─────────
 # Daniel (y SOLO el 50497041381) puede consultar el COSTO de un producto:
 # últimas entradas del proveedor (fecha, cantidad, precio unitario, factura)
@@ -6681,7 +6977,12 @@ def orchestrate(message_data: dict):
             save_state(state)
             return
 
-        sales_agent(from_number, from_name, text, state)
+        # v31.0: los números de Daniel hablan con el AGENTE interno (tool use);
+        # todos los demás siguen con el pipeline de ventas probado.
+        if from_number in INTERNAL_AGENT_NUMBERS:
+            internal_agent_respond(from_number, from_name, text, state)
+        else:
+            sales_agent(from_number, from_name, text, state)
         return
 
     elif msg_type == "document":
