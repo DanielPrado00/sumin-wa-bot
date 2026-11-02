@@ -494,6 +494,39 @@ finally:
     main.fetch_zoho_catalog, main.match_product_to_catalog = _orig_fetch, _orig_match
 
 
+# ─── 9. Fracciones habladas (v30.8, notas de voz) ──────────────────────────
+section("9. Fracciones habladas (v30.8)")
+
+check("'tungsteno de un octavo' → 1/8",
+      "1/8" in main._normalize_query_for_search("tungsteno de un octavo"))
+check("'la variedad tungsteno de un 16' → 1/16",
+      "1/16" in main._normalize_query_for_search("la variedad tungsteno de un 16"))
+check("'tres treinta y dos' → 3/32",
+      "3/32" in main._normalize_query_for_search("tungsteno de tres treinta y dos"))
+check("'cinco treinta y dos' → 5/32",
+      "5/32" in main._normalize_query_for_search("electrodo 7018 de cinco treinta y dos"))
+check("'tres octavos' → 3/8 (no 1/8)",
+      "3/8" in main._normalize_query_for_search("varilla de tres octavos")
+      and "1/8" not in main._normalize_query_for_search("varilla de tres octavos"))
+check("'un dieciseisavo' → 1/16",
+      "1/16" in main._normalize_query_for_search("er4043 de un dieciseisavo"))
+# Guard: '16' suelto (cantidad) NO se convierte
+check("'quiero 16 libras' NO se vuelve fracción",
+      "1/16" not in main._normalize_query_for_search("quiero 16 libras de 6011"))
+
+# El caso completo del 02-nov: prefilter con fake catalog de tungstenos
+_tung_cat = [
+    {"item_name": "ELECTRODO PARA TIG TUNGSTENO DE 1/8 (CERIO 2%) GRIS", "sku": "a", "rate": 280, "unit": "UND", "stock_on_hand": 544},
+    {"item_name": "ELECTRODO PARA TIG TUNGSTENO DE 3/32 (CERIO 2%) GRIS", "sku": "b", "rate": 170, "unit": "UND", "stock_on_hand": 433},
+    {"item_name": "ELECTRODO PARA TIG TUNGSTENO DE 1/16 (TORIO 2%) ROJO", "sku": "c", "rate": 75, "unit": "UND", "stock_on_hand": 424},
+]
+_q = main._normalize_query_for_search(
+    "que vale la variedad tungsteno de un octavo, la variedad tungsteno de 3.32 y la variedad tungsteno de un 16")
+_top = main._prefilter_catalog(_q, _tung_cat, top_n=3)
+check("transcript real 10:33 → los TRES diámetros en el prefilter",
+      len(_top) == 3)
+
+
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
 total = len(results)

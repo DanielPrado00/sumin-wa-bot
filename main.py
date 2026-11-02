@@ -1679,7 +1679,17 @@ def transcribe_audio_whisper(audio_bytes: bytes, mime_type: str = "audio/ogg") -
         suffix = ".webm"
     try:
         files = {"file": (f"audio{suffix}", audio_bytes, mime_type)}
-        data  = {"model": "whisper-1", "language": "es"}
+        data  = {
+            "model": "whisper-1", "language": "es",
+            # v30.8: glosario SUMIN como contexto — sesga la transcripción
+            # hacia fracciones escritas (1/8, 3/32) y vocabulario del rubro.
+            "prompt": ("Pedido de soldadura SUMIN Honduras: electrodo 6011, 6013, "
+                       "7018, 7024, tungsteno TIG, microalambre ER70S-6, E71T-GS, "
+                       "varilla de aporte, diámetros 1/16, 5/64, 3/32, 1/8, 5/32, "
+                       "3/16, 7/32, 1/4, 5/16, 3/8; libras, rollo de 2 lbs, 10 lbs, "
+                       "11 lbs, 33 lbs, caja de 10 libras, caja de 50 libras, "
+                       "cotización, flete, Expreco, consumidor final."),
+        }
         r = httpx.post(
             "https://api.openai.com/v1/audio/transcriptions",
             headers={"Authorization": f"Bearer {api_key}"},
@@ -2367,6 +2377,26 @@ _DOT_FRAC_NORMALIZE: dict[str, str] = {
     "3.8": "3/8",
 }
 
+# v30.8: fracciones HABLADAS (notas de voz). Whisper transcribe "un octavo",
+# "tres treinta y dos", "de un 16" — hay que convertirlas a la fracción para
+# que el prefilter/matcher las vean. Caso real 02-nov: "tungsteno de un
+# octavo" no matcheó ningún 1/8. Orden importa: multi-palabra primero.
+_SPOKEN_FRAC_PATTERNS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"\btres\s+octavos?\b", re.IGNORECASE), "3/8"),
+    (re.compile(r"\b(?:un|1)\s+octavo\b", re.IGNORECASE), "1/8"),
+    (re.compile(r"\b(?:un|1)\s+cuarto\b", re.IGNORECASE), "1/4"),
+    (re.compile(r"\bcinco\s+dieciseis(?:avos?)?\b", re.IGNORECASE), "5/16"),
+    (re.compile(r"\btres\s+dieciseis(?:avos?)?\b", re.IGNORECASE), "3/16"),
+    (re.compile(r"\b(?:un|1)\s+dieciseis(?:avo)?\b", re.IGNORECASE), "1/16"),
+    (re.compile(r"\bde\s+un\s+16\b", re.IGNORECASE), "de 1/16"),
+    (re.compile(r"\bcinco\s+treinta\s*y\s*dos(?:avos?)?\b", re.IGNORECASE), "5/32"),
+    (re.compile(r"\btres\s+treinta\s*y\s*dos(?:avos?)?\b", re.IGNORECASE), "3/32"),
+    (re.compile(r"\bsiete\s+treinta\s*y\s*dos(?:avos?)?\b", re.IGNORECASE), "7/32"),
+    (re.compile(r"\bcinco\s+sesenta\s*y\s*cuatro(?:avos?)?\b", re.IGNORECASE), "5/64"),
+    (re.compile(r"\b(?:cinco|5)\s+treintaidos\b", re.IGNORECASE), "5/32"),
+    (re.compile(r"\b(?:tres|3)\s+treintaidos\b", re.IGNORECASE), "3/32"),
+]
+
 
 # When the customer says "manómetro" WITHOUT specifying a pressure range
 # ("0-30", "0-200") or face size ("1-1/2", "2 pulgadas", "200 PSI"), it's
@@ -2428,6 +2458,10 @@ def _normalize_query_for_search(text: str) -> str:
     #    same because the alloy/diameter tokens dominate. Canonicalize to
     #    " <N> lbs " so the substring match in _prefilter_catalog works.
     out = re.sub(r"(\d+)\s*(?:lbs?|libras?)\b", r"\1 lbs", out, flags=re.IGNORECASE)
+
+    # 0.5) v30.8: fracciones habladas (notas de voz) → fracción escrita
+    for pat, frac in _SPOKEN_FRAC_PATTERNS:
+        out = pat.sub(frac, out)
 
     # 1) "X.Y mm" → "X/Y" (mm to fraction)
     def _mm_repl(m):
@@ -2898,9 +2932,9 @@ def zoho_inventory_context(text: str, history: list | None = None) -> str:
         # para que el cerebro resuelva consultas multi-producto él mismo.
         candidates_tbl = ""
         try:
-            focused = _prefilter_catalog(_normalize_query_for_search(query), catalog, top_n=8)
+            focused = _prefilter_catalog(_normalize_query_for_search(query), catalog, top_n=10)
             rows = []
-            for it in focused[:8]:
+            for it in focused[:10]:
                 nm = it.get("item_name", "")
                 if not nm:
                     continue
