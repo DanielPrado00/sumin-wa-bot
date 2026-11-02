@@ -553,6 +553,8 @@ main._item_purchase_history = lambda item_id, max_entries=3, max_bills=30: [
     {"date": "2026-09-14", "vendor": "Inwelt", "qty": 500, "rate": 27.8, "currency": "USD", "bill_number": "BILL-0012"},
     {"date": "2026-06-02", "vendor": "Inwelt", "qty": 300, "rate": 26.5, "currency": "USD", "bill_number": "BILL-0007"},
 ]
+_orig_extract = main.extract_items_for_quote
+main.extract_items_for_quote = lambda t, h: ([], "")  # fallback → query entera
 try:
     ok = main.cost_agent("50497041381", "cual es el costo del alambre e71t-gs de 10 libras", _state_c)
     _msg = main._TEST_STATE.capture[-1]["text"] if main._TEST_STATE.capture else ""
@@ -561,8 +563,36 @@ try:
           "2026-09-14" in _msg and "27.80 dólares" in _msg and "BILL-0012" in _msg)
     check("  marcado como interno", "interno" in _msg)
     check("  con precio de venta y stock", "1,045.44" in _msg and "797" in _msg)
+
+    # v30.10: seguimiento corto en modo costo ('y el de 0.9 mm?')
+    main._TEST_STATE.capture = []
+    ok2 = main.cost_agent("50497041381", "y el de 0.9 mm?", _state_c)
+    check("seguimiento 'y el de 0.9 mm?' sigue en modo costo", ok2 is True)
+    _meta_c = main.get_conv_meta(_state_c, "50497041381")
+    check("  query combinada con el producto anterior",
+          "e71t-gs" in _meta_c.get("last_cost_query", "").lower()
+          and "0.9" in _meta_c.get("last_cost_query", ""))
+
+    # v30.10: multi-item ('la antorcha X y el maneral Y')
+    _cat2 = [
+        {"item_id": "A", "item_name": "ANTORCHA DE OXICORTE SAFECUT CA-460", "rate": 2800, "unit": "UND", "stock_on_hand": 5},
+        {"item_id": "B", "item_name": "MANERAL DE OXICORTE SAFECUT WH450", "rate": 3200, "unit": "UND", "stock_on_hand": 3},
+    ]
+    main.fetch_zoho_catalog = lambda: _cat2
+    main.extract_items_for_quote = lambda t, h: (
+        [{"product": "antorcha oxicorte CA-460", "quantity": 1, "unit": ""},
+         {"product": "maneral oxicorte safecut", "quantity": 1, "unit": ""}], "")
+    main.match_product_to_catalog = lambda q, c, requested_unit="": (
+        _cat2[0] if "460" in q else _cat2[1])
+    main._item_purchase_history = lambda item_id, max_entries=3, max_bills=30: []
+    main._TEST_STATE.capture = []
+    ok3 = main.cost_agent("50497041381", "cual es el costo de la antorcha CA-460 y el maneral safecut", _state_c)
+    _msg3 = main._TEST_STATE.capture[-1]["text"] if main._TEST_STATE.capture else ""
+    check("multi-item: responde los DOS productos en un mensaje",
+          ok3 is True and "CA-460" in _msg3 and "WH450" in _msg3)
 finally:
     main.fetch_zoho_catalog, main.match_product_to_catalog, main._item_purchase_history = _orig
+    main.extract_items_for_quote = _orig_extract
     main._TEST_STATE.capture = None
 
 

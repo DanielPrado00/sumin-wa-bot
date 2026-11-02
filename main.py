@@ -6014,45 +6014,102 @@ def _item_purchase_history(item_id: str, max_entries: int = 3,
     return out[:max_entries]
 
 
+def _is_cost_followup(text: str) -> bool:
+    """v30.10: seguimiento corto en modo costo — 'y el de 0.9 mm?',
+    'y en 33 lbs', 'el 0.035'. Corto y con un spec (dígito/mm/lbs/fracción)."""
+    t = (text or "").strip()
+    return bool(t) and len(t) <= 45 and bool(re.search(r"\d|mm\b|lbs?\b|libras?\b", t, re.IGNORECASE))
+
+
 def cost_agent(from_number: str, text: str, state: dict) -> bool:
     """Consulta interna de costos — exclusiva del número founder de Daniel."""
     if from_number != DANIEL_PHONE:
         return False
-    if not text or not _COST_KEYWORD_RE.search(text):
+    if not text:
+        return False
+    meta = get_conv_meta(state, from_number)
+    has_kw = bool(_COST_KEYWORD_RE.search(text))
+    # v30.10: modo costo con memoria — tras una consulta de costo, los
+    # seguimientos cortos ('y el de 0.9 mm?') siguen en costo combinando
+    # con el producto anterior, en vez de caer al cerebro de ventas.
+    in_cost_mode = False
+    from datetime import timedelta
+    try:
+        in_cost_mode = (datetime.fromisoformat(meta.get("cost_mode_at", ""))
+                        >= datetime.now() - timedelta(minutes=10))
+    except ValueError:
+        pass
+    if not has_kw and not (in_cost_mode and _is_cost_followup(text)):
         return False
     query = _COST_KEYWORD_RE.sub(" ", text)
     query = re.sub(r"\b(cu[aá]l\s+es|cu[aá]nto|las\s+[uú]ltimas|veces|fechas|"
                    r"el\s+proveedor|proveedor|inventario|d[ií]game|decime|dame)\b",
                    " ", query, flags=re.IGNORECASE).strip()
+    if not has_kw:
+        # seguimiento: combinar con la consulta anterior (el spec nuevo —
+        # diámetro/peso — manda sobre el viejo vía el matcher)
+        query = f"{meta.get('last_cost_query', '')} {query}".strip()
+    meta["cost_mode_at"] = datetime.now().isoformat()
+    meta["last_cost_query"] = query
+    save_state(state)
     catalog = fetch_zoho_catalog()
-    item = match_product_to_catalog(query, catalog) if catalog else None
-    if not item:
+    if not catalog:
+        wa_send(from_number, "No pude cargar el catálogo de Zoho ahorita. Reintentá en un momento.")
+        return True
+
+    # v30.10: soporte MULTI-ITEM (caso real 02-nov, audio: 'la antorcha
+    # CA-460 y el maneral SafeCut y los reguladores...'). El extractor de
+    # cotizaciones ya sabe partir productos — lo reusamos; fallback: query
+    # entera como un solo producto.
+    products: list[str] = []
+    try:
+        extracted, _ = extract_items_for_quote(query, [])
+        products = [(it.get("product") or "").strip()
+                    for it in extracted if (it.get("product") or "").strip()]
+    except Exception as e:
+        log_action("CostAgent", "extract_error", str(e)[:120])
+    if not products:
+        products = [query]
+    products = products[:4]
+
+    sections, not_found = [], []
+    for prod in products:
+        item = match_product_to_catalog(prod, catalog)
+        if not item:
+            not_found.append(prod)
+            continue
+        hist = _item_purchase_history(item.get("item_id", ""))
+        name  = item.get("item_name", "")
+        stock = item.get("stock_on_hand", "")
+        venta = float(item.get("rate") or 0)
+        lines = [f"🔒 *{name}*"]
+        if hist:
+            for h in hist:
+                cur = {"USD": "dólares", "HNL": "lempiras", "": "lempiras"}.get(
+                    h["currency"], h["currency"])
+                lines.append(f"• {h['date']} — {h['vendor']} — {h['qty']:g} und a "
+                             f"{h['rate']:,.2f} {cur} cada una ({h['bill_number']})")
+        else:
+            lines.append("• Sin entradas en las últimas 30 facturas de compra.")
+        if venta > 0:
+            lines.append(f"Venta: {venta:,.2f} lempiras + ISV = "
+                         f"{venta * 1.15:,.2f} lempiras. Stock: {stock}.")
+        sections.append("\n".join(lines))
+
+    if not sections:
         wa_send(from_number,
-                "¿De qué producto querés el costo? No matcheé ninguno del catálogo "
-                f"con '{query[:60]}'.")
+                f"No encontré en el catálogo nada para '{query[:60]}'. "
+                "Puede estar con otro nombre o esa presentación no existe — "
+                "probá con el nombre más completo o el SKU.")
         log_action("CostAgent", "no_match", query[:80])
         return True
-    hist = _item_purchase_history(item.get("item_id", ""))
-    name  = item.get("item_name", "")
-    stock = item.get("stock_on_hand", "")
-    venta = float(item.get("rate") or 0)
-    lines = [f"🔒 *{name}* — interno"]
-    if hist:
-        lines.append("Últimas entradas del proveedor:")
-        for h in hist:
-            cur = {"USD": "dólares", "HNL": "lempiras", "": "lempiras"}.get(
-                h["currency"], h["currency"])
-            lines.append(f"• {h['date']} — {h['vendor']} — {h['qty']:g} und a "
-                         f"{h['rate']:,.2f} {cur} cada una ({h['bill_number']})")
-    else:
-        lines.append("No encontré entradas de este item en las últimas 30 facturas "
-                     "de compra de Zoho.")
-    if venta > 0:
-        lines.append(f"Venta: {venta:,.2f} lempiras + ISV = "
-                     f"{venta * 1.15:,.2f} lempiras. Stock: {stock}.")
-    msg = "\n".join(lines)
+
+    msg = "\n\n".join(sections)
+    if not_found:
+        msg += "\n\nNo matcheé en catálogo: " + ", ".join(n[:40] for n in not_found)
+    msg += "\n\n_(interno — solo este número)_"
     wa_send(from_number, msg)
-    log_action("CostAgent", "answered", f"{name[:50]} entradas={len(hist)}")
+    log_action("CostAgent", "answered", f"items={len(sections)} nf={len(not_found)}")
     if from_number not in state["conversations"]:
         state["conversations"][from_number] = []
     history = state["conversations"][from_number]
