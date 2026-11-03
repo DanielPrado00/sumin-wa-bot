@@ -690,6 +690,47 @@ check("tool de flete: Marcala 8 lbs = 194.85 L",
       abs((_rf.get("total_L_antes_isv") or 0) - 194.85) < 0.01)
 
 
+# ─── 14. Modo costos vs agente + diámetros (v31.2) ──────────────────────────
+section("14. Cost followup vs ventas + variantes de diámetro (v31.2)")
+
+# Bug real 02-nov 18:09: 'cuánto 8018 ha llevado azunosa este año?' (41 chars,
+# con dígitos) caía como followup de costos y repetía la respuesta anterior.
+check("followup: pregunta de ventas NO es followup de costo",
+      not main._is_cost_followup("cuánto 8018 ha llevado azunosa este año?"))
+check("followup: 'y el de 0.9 mm?' sí es followup",
+      main._is_cost_followup("y el de 0.9 mm?"))
+check("followup: 'el 0.045' sí es followup",
+      main._is_cost_followup("el 0.045"))
+check("followup: pregunta de flete NO es followup",
+      not main._is_cost_followup("flete a morazán de 10 libras"))
+check("followup: 'cotizame 5 libras' NO es followup",
+      not main._is_cost_followup("cotizame 5 libras"))
+check("followup: 'y la última compra del 0.030?' sí es followup",
+      main._is_cost_followup("y la última compra del 0.030?"))
+
+_cat_diam = [
+    {"item_id": "a", "item_name": 'MICROALAMBRE ER70S-6 0.035" 11 LBS'},
+    {"item_id": "b", "item_name": 'MICROALAMBRE ER70S-6 0.030" 11 LBS'},
+    {"item_id": "c", "item_name": 'MICROALAMBRE ER70S-6 0.045" 33 LBS'},
+    {"item_id": "d", "item_name": "ELECTRODO 6011 1/8 A.A."},
+    {"item_id": "e", "item_name": "ELECTRODO 6011 3/32 A.A."},
+]
+_v = main._cost_diameter_variants("microalambre er70s-6 de 11 libras",
+                                  _cat_diam[0], _cat_diam)
+check("variantes: sin diámetro en consulta → los 2 de 11 LBS",
+      len(_v) == 2 and {i["item_id"] for i in _v} == {"a", "b"})
+check("variantes: el matcheado va primero", _v[0]["item_id"] == "a")
+_v2 = main._cost_diameter_variants("er70s-6 0.035 de 11 libras",
+                                   _cat_diam[0], _cat_diam)
+check("variantes: con diámetro en consulta → solo el matcheado",
+      len(_v2) == 1 and _v2[0]["item_id"] == "a")
+_v3 = main._cost_diameter_variants("electrodo 6011 aa", _cat_diam[3], _cat_diam)
+check("variantes: 6011 sin fracción → 1/8 y 3/32",
+      len(_v3) == 2 and {i["item_id"] for i in _v3} == {"d", "e"})
+_v4 = main._cost_diameter_variants("6011 de 1/8", _cat_diam[3], _cat_diam)
+check("variantes: 6011 con fracción → solo uno", len(_v4) == 1)
+
+
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
 total = len(results)

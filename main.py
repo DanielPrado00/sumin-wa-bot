@@ -6421,11 +6421,23 @@ def _item_purchase_history(item_id: str, max_entries: int = 3,
     return out[:max_entries]
 
 
+_COST_FOLLOWUP_EXCLUDE_RE = re.compile(
+    r"\b(llevad\w*|vendid\w*|ventas?|comprado|cotiz\w*|client\w*|qui[eé]n\w*|"
+    r"flete\w*|env[ií]os?|enviar|mandar|azucarer\w*)\b", re.IGNORECASE)
+
+
 def _is_cost_followup(text: str) -> bool:
     """v30.10: seguimiento corto en modo costo — 'y el de 0.9 mm?',
-    'y en 33 lbs', 'el 0.035'. Corto y con un spec (dígito/mm/lbs/fracción)."""
+    'y en 33 lbs', 'el 0.035'. Corto y con un spec (dígito/mm/lbs/fracción).
+    v31.2: NUNCA si suena a ventas/cotización/flete ('cuánto 8018 ha llevado
+    Azunosa este año' caía acá y repetía el costo anterior) — eso debe pasar
+    al agente interno."""
     t = (text or "").strip()
-    return bool(t) and len(t) <= 45 and bool(re.search(r"\d|mm\b|lbs?\b|libras?\b", t, re.IGNORECASE))
+    if not t or len(t) > 45:
+        return False
+    if _COST_FOLLOWUP_EXCLUDE_RE.search(t):
+        return False
+    return bool(re.search(r"\d|mm\b|lbs?\b|libras?\b", t, re.IGNORECASE))
 
 
 _PO_CACHE: dict = {"list": None, "expires": 0.0, "details": {}}
@@ -6612,6 +6624,40 @@ def _vendor_cost_table(vendor_id: str, filter_tokens: set,
     return lines
 
 
+# v31.2: detección de diámetro (ver tests sección 14) — en el NOMBRE de un item (0.035", 1/8", 0.9 MM)
+# y en la CONSULTA del usuario. Si la consulta no trae diámetro y el item
+# matcheado tiene hermanos que solo difieren en diámetro, el costo se muestra
+# para todos (caso real 02-nov: 'costo del ER70S-6 de 11 libras' → solo dio
+# el 0.035" habiendo 0.030" y 0.035").
+_DIAM_NAME_RE = re.compile(
+    r"\d+\s*/\s*\d+\s*\"?|\b\d*\.\d{2,3}\s*\"?|\b\d+(?:\.\d+)?\s*MM\b",
+    re.IGNORECASE)
+_QUERY_DIAM_RE = re.compile(
+    r"\d\s*/\s*\d|\.\d{2,3}|\b\d+(?:[.,]\d+)?\s*mm\b", re.IGNORECASE)
+
+
+def _cost_diameter_variants(prod_query: str, item: dict, catalog: list) -> list[dict]:
+    """Devuelve [item] si la consulta especifica diámetro o no hay hermanos;
+    si no, todos los items cuyo nombre sin el diámetro es idéntico."""
+    if _QUERY_DIAM_RE.search(prod_query or ""):
+        return [item]
+    name = item.get("item_name", "") or ""
+    if not _DIAM_NAME_RE.search(name):
+        return [item]
+
+    def _base(nm: str) -> str:
+        b = _DIAM_NAME_RE.sub(" ", (nm or "").upper())
+        return re.sub(r"[\"\s]+", " ", b).strip()
+
+    b0 = _base(name)
+    out = [it for it in catalog if _base(it.get("item_name", "")) == b0]
+    if len(out) <= 1:
+        return [item]
+    out.sort(key=lambda it: (it.get("item_id") != item.get("item_id"),
+                             it.get("item_name", "")))
+    return out[:4]
+
+
 def cost_agent(from_number: str, text: str, state: dict) -> bool:
     """Consulta interna de costos — exclusiva del número founder de Daniel."""
     if from_number != DANIEL_PHONE:
@@ -6698,12 +6744,7 @@ def cost_agent(from_number: str, text: str, state: dict) -> bool:
         products = [query]
     products = products[:4]
 
-    sections, not_found = [], []
-    for prod in products:
-        item = match_product_to_catalog(prod, catalog)
-        if not item:
-            not_found.append(prod)
-            continue
+    def _cost_section_for_item(item: dict) -> str:
         hist = _item_purchase_history(item.get("item_id", ""),
                                       vendor_name=item.get("vendor_name", "") or "")
         po_hist_pre = []
@@ -6756,7 +6797,21 @@ def cost_agent(from_number: str, text: str, state: dict) -> bool:
         if venta > 0:
             lines.append(f"Venta: {venta:,.2f} lempiras + ISV = "
                          f"{venta * 1.15:,.2f} lempiras. Stock: {stock}.")
-        sections.append("\n".join(lines))
+        return "\n".join(lines)
+
+    sections, not_found = [], []
+    for prod in products:
+        item = match_product_to_catalog(prod, catalog)
+        if not item:
+            not_found.append(prod)
+            continue
+        # v31.2: sin diámetro en la consulta → mostrar todos los diámetros
+        variants = _cost_diameter_variants(prod, item, catalog)
+        for it2 in variants:
+            sections.append(_cost_section_for_item(it2))
+        if len(variants) > 1:
+            sections.append(f"_Hay {len(variants)} diámetros de ese — "
+                            "decime cuál si querés ver solo uno._")
 
     if not sections:
         # v30.16: en vez de un 'no encontré' seco, sugerir los candidatos del
