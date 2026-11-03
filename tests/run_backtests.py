@@ -731,6 +731,48 @@ _v4 = main._cost_diameter_variants("6011 de 1/8", _cat_diam[3], _cat_diam)
 check("variantes: 6011 con fracción → solo uno", len(_v4) == 1)
 
 
+# ─── 15. Cotización por ROLLO para microalambres (v31.3) ────────────────────
+section("15. Línea en ROLLO para microalambres (v31.3)")
+
+_orig_uom = main._item_unit_conversions
+main._item_unit_conversions = lambda item_id: {
+    "mw33": [{"target_unit": "ROLLO", "conversion_rate": 33,
+              "unit_conversion_id": "UC33"}],
+    "mw2":  [{"target_unit": "ROLLO", "conversion_rate": 2,
+              "unit_conversion_id": "UC2"}],
+    "mw_nc": [],
+}.get(item_id, [])
+try:
+    _lis = main._rollify_line_items([
+        {"item_id": "mw33", "name": 'MICROALAMBRE COBRIZ 0.045" ER70S-6 33 LBS.',
+         "quantity": 66, "rate": 27.88, "unit": "LB"},
+        {"item_id": "mw33", "name": 'MICROALAMBRE COBRIZ 0.045" ER70S-6 33 LBS.',
+         "quantity": 40, "rate": 27.88, "unit": "LB"},
+        {"item_id": "e1", "name": "ELECTRODO 6011 1/8 A.A.",
+         "quantity": 33, "rate": 48.0, "unit": "LB"},
+        {"item_id": "mw2", "name": 'MICROALAMBRE INOX 0.035" 2 LBS',
+         "quantity": 16, "rate": 100.0, "unit": "LB"},
+        {"item_id": "mw_nc", "name": "MICROALAMBRE X 33 LBS",
+         "quantity": 33, "rate": 10.0, "unit": "LB"},
+    ])
+    check("rollify: 66 LB del rollo de 33 → 2 ROLLO @ 920.04",
+          _lis[0]["quantity"] == 2 and _lis[0]["unit"] == "ROLLO"
+          and abs(_lis[0]["rate"] - 920.04) < 0.01
+          and _lis[0]["unit_conversion_id"] == "UC33")
+    check("rollify: total se conserva (2×920.04 = 66×27.88)",
+          abs(_lis[0]["quantity"] * _lis[0]["rate"] - 66 * 27.88) < 0.01)
+    check("rollify: 40 LB no es múltiplo de 33 → queda en LB",
+          _lis[1]["unit"] == "LB" and _lis[1]["quantity"] == 40)
+    check("rollify: electrodo nunca se convierte",
+          _lis[2]["unit"] == "LB" and _lis[2]["quantity"] == 33)
+    check("rollify: 16 LB de rollos de 2 → 8 ROLLO @ 200",
+          _lis[3]["quantity"] == 8 and abs(_lis[3]["rate"] - 200.0) < 0.01)
+    check("rollify: sin conversión ROLLO en Zoho → queda en LB",
+          _lis[4]["unit"] == "LB")
+finally:
+    main._item_unit_conversions = _orig_uom
+
+
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
 total = len(results)

@@ -4540,6 +4540,75 @@ def _template_id_for_customer(customer_id: str | None) -> str | None:
     return ZOHO_TEMPLATE_DEFAULT
 
 
+# v31.3: los MICROALAMBRES se cotizan POR ROLLO (pedido Daniel 03-nov). El
+# item vive en LB en Zoho, pero el cliente piensa en rollos: si la cantidad
+# en libras es múltiplo exacto del peso del rollo (del nombre, '33 LBS.'),
+# la línea sale en la unidad ROLLO del propio item (unit_conversions de
+# Zoho), con tarifa por rollo — igual que la conversión de unidad del UI de
+# Books. Solo microalambres; electrodos por libra quedan igual.
+_UOM_CACHE: dict = {}
+_ROLLIFY_NAME_RE = re.compile(r"MICROALAMBRE", re.IGNORECASE)
+_NAME_LBS_RE = re.compile(r"(\d+(?:\.\d+)?)\s*LBS?\b", re.IGNORECASE)
+
+
+def _item_unit_conversions(item_id: str) -> list:
+    """unit_conversions del item (GET /items/{id}), cacheado 24 h."""
+    if not item_id:
+        return []
+    cached = _UOM_CACHE.get(item_id)
+    if cached is not None and cached["expires"] > time.time():
+        return cached["list"]
+    out = []
+    token = get_zoho_access_token()
+    if token and ZOHO_ORG_ID:
+        try:
+            r = httpx.get(f"https://www.zohoapis.com/books/v3/items/{item_id}",
+                          params={"organization_id": ZOHO_ORG_ID},
+                          headers={"Authorization": f"Zoho-oauthtoken {token}"},
+                          timeout=10)
+            if r.status_code == 200:
+                out = r.json().get("item", {}).get("unit_conversions", []) or []
+        except Exception as e:
+            log_action("ZohoAPI", "uom_error", str(e)[:120])
+    _UOM_CACHE[item_id] = {"list": out, "expires": time.time() + 86400}
+    return out
+
+
+def _rollify_line_items(formatted: list[dict]) -> list[dict]:
+    """Convierte líneas de microalambre de LB → ROLLO cuando la cantidad es
+    un número exacto de rollos y el item tiene la conversión ROLLO en Zoho."""
+    for li in formatted:
+        name = li.get("name", "") or ""
+        if not _ROLLIFY_NAME_RE.search(name):
+            continue
+        unit0 = (li.get("unit") or "LB").upper().strip().rstrip(".")
+        if unit0 not in {"", "LB", "LBS", "LIBRA", "LIBRAS"}:
+            continue
+        m = _NAME_LBS_RE.search(name)
+        if not m:
+            continue
+        roll_lbs = float(m.group(1))
+        qty = float(li.get("quantity") or 0)
+        if roll_lbs <= 0 or qty <= 0:
+            continue
+        k = qty / roll_lbs
+        if abs(k - round(k)) > 1e-6 or round(k) < 1:
+            continue  # libras sueltas → se queda en LB
+        conv = next((c for c in _item_unit_conversions(li.get("item_id", ""))
+                     if (c.get("target_unit") or "").strip().upper() == "ROLLO"
+                     and abs(float(c.get("conversion_rate") or 0) - roll_lbs) < 0.01),
+                    None)
+        if not conv:
+            continue
+        li["quantity"] = int(round(k))
+        li["rate"] = round(float(li.get("rate") or 0) * roll_lbs, 2)
+        li["unit"] = "ROLLO"
+        li["unit_conversion_id"] = conv.get("unit_conversion_id", "")
+        log_action("ZohoAPI", "rollify",
+                   f"{name[:45]} → {li['quantity']} ROLLO @ {li['rate']}")
+    return formatted
+
+
 def zoho_create_estimate(customer_name: str, customer_phone: str, line_items: list[dict]) -> dict | None:
     """Create a Zoho Books estimate. Requires customer_id, which we look up
     (or create) via zoho_get_or_create_customer.
@@ -4577,6 +4646,7 @@ def zoho_create_estimate(customer_name: str, customer_phone: str, line_items: li
          "rate": li["rate"], "unit": li.get("unit", "")}
         for li in line_items
     ]
+    formatted = _rollify_line_items(formatted)
     template_id = _template_id_for_customer(customer_id)
     payload = {
         "customer_id": customer_id,
@@ -4638,6 +4708,7 @@ def zoho_update_estimate(estimate_id: str, customer_id: str, line_items: list[di
          "rate": li["rate"], "unit": li.get("unit", "")}
         for li in line_items
     ]
+    formatted = _rollify_line_items(formatted)
     payload = {
         "customer_id": customer_id,
         "line_items":  formatted,
