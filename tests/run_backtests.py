@@ -814,6 +814,12 @@ check("nombre explícito: 'a nombre de quién' NO captura",
       not re.search(r"a\s+nombre\s+de\s+(?!qui[eé]n)([^\n,;?(]{3,60})",
                     "¿a nombre de quién la hago?", re.IGNORECASE))
 
+# v31.5: reglas de marca en el prompt del agente interno
+check("agente: regla de marcas (sin W.A. salvo pedido) está en el prompt",
+      "W.A." in main._AGENT_SYSTEM and "UN SOLO precio" in main._AGENT_SYSTEM)
+check("agente: regla de precios reenviables está en el prompt",
+      "REENVIABLES" in main._AGENT_SYSTEM)
+
 
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
