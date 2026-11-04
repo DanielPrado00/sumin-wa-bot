@@ -814,6 +814,22 @@ check("nombre explícito: 'a nombre de quién' NO captura",
       not re.search(r"a\s+nombre\s+de\s+(?!qui[eé]n)([^\n,;?(]{3,60})",
                     "¿a nombre de quién la hago?", re.IGNORECASE))
 
+# v31.6: respuesta corta a pregunta del agente vuelve al agente
+_hist_puq = [{"role": "user", "content": "precio del er70s-6 0.035"},
+             {"role": "assistant",
+              "content": "*MICROALAMBRE ER70S-6 0.035*... ¿Cuál presentación necesitás?"}]
+check("followup: 'de 33 libras' tras '¿cuál presentación?' SÍ es seguimiento",
+      main._is_followup_to_bot_question("de 33 libras", _hist_puq))
+_hist_libre = [{"role": "assistant",
+                "content": "¿Querés que incluya también el de 11 lbs?"}]
+check("followup interno: pregunta libre del agente + respuesta corta",
+      main._is_followup_to_bot_question("si el de 33", _hist_libre, internal=True))
+check("followup interno: 'cotizame 5 cajas de 7018' NO es seguimiento",
+      not main._is_followup_to_bot_question("cotizame 5 cajas de 7018",
+                                            _hist_libre, internal=True))
+check("followup NO interno: pregunta libre no listada no captura",
+      not main._is_followup_to_bot_question("si el de 33", _hist_libre))
+
 # v31.5: reglas de marca en el prompt del agente interno
 check("agente: regla de marcas (sin W.A. salvo pedido) está en el prompt",
       "W.A." in main._AGENT_SYSTEM and "UN SOLO precio" in main._AGENT_SYSTEM)

@@ -3813,6 +3813,13 @@ _BOT_FOLLOWUP_QUESTION_PATTERNS = (
     # Specs
     "qué diámetro", "que diametro", "qué calibre", "que calibre",
     "qué presentación", "que presentacion", "con gas o sin gas",
+    # v31.6: formas que usa el agente interno (caso real 04-nov: '¿Cuál
+    # presentación necesitás?' → 'de 33 libras' cayó al flow de cotización
+    # y matcheó el 600 HT equivocado)
+    "cuál presentación", "cual presentacion", "cuáles versiones",
+    "cuales versiones", "cuál de los", "cual de los", "cuál de las",
+    "cual de las", "cuál necesitás", "cual necesitas", "cuál opción",
+    "cual opcion", "cuál querés", "cual queres",
     "qué tipo", "que tipo", "qué marca", "que marca", "qué color", "que color",
     "qué grosor", "que grosor", "qué medida", "que medida",
     "qué número", "que numero", "qué modelo", "que modelo",
@@ -3823,7 +3830,8 @@ _BOT_FOLLOWUP_QUESTION_PATTERNS = (
 )
 
 
-def _is_followup_to_bot_question(text: str, history: list) -> bool:
+def _is_followup_to_bot_question(text: str, history: list,
+                                 internal: bool = False) -> bool:
     """v29.2 — True si el último turno del bot fue una pregunta de seguimiento
     y el mensaje actual del cliente es una respuesta corta a esa pregunta.
 
@@ -3849,9 +3857,14 @@ def _is_followup_to_bot_question(text: str, history: list) -> bool:
     if not last_bot_msg:
         return False
     # ¿La pregunta del bot termina en "?" o tiene patrón de pregunta de seguimiento?
-    if not any(p in last_bot_msg for p in _BOT_FOLLOWUP_QUESTION_PATTERNS):
-        return False
-    return True
+    if any(p in last_bot_msg for p in _BOT_FOLLOWUP_QUESTION_PATTERNS):
+        return True
+    # v31.6: para números INTERNOS (agente), el agente formula preguntas
+    # libres que ninguna lista va a cubrir — cualquier pregunta del bot +
+    # respuesta corta sin trigger de cotización cuenta como seguimiento.
+    if internal and "¿" in last_bot_msg and not _explicit_new_quote_request(text):
+        return True
+    return False
 
 
 def _explicit_new_quote_request(text: str) -> bool:
@@ -7155,7 +7168,8 @@ def orchestrate(message_data: dict):
         # cuántas unidades, cliente respondió "6 unidades", bot inició una
         # nueva cotización pidiendo productos (perdió el contexto).
         _history_for_context = state["conversations"].get(from_number, [])
-        if _is_followup_to_bot_question(text, _history_for_context):
+        if _is_followup_to_bot_question(text, _history_for_context,
+                                        internal=from_number in INTERNAL_AGENT_NUMBERS):
             log_action("Orchestrator", "skip_quote_followup", f"text='{text[:60]}'")
             # Caer al claude_respond normal (sales_agent), que tiene el
             # historial completo y puede responder en contexto.
