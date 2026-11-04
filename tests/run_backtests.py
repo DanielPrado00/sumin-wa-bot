@@ -773,6 +773,48 @@ finally:
     main._item_unit_conversions = _orig_uom
 
 
+# ─── 16. Contexto de cotización: unidad pendiente + reset (v31.4) ───────────
+section("16. Pregunta de unidad + cotización nueva (v31.4)")
+
+from datetime import datetime as _dt, timedelta as _td
+
+# Caso real 04-nov: '4 cajas de 6011 a nombre de IMBA' → pregunta de unidad →
+# 'si 40 libras seran en total' debe COMBINARSE con el pedido original.
+_puq = {"request_text": "cotizacion 4 cajas de 6011 a nombre de industrias IMBA",
+        "asked_at": _dt.now().isoformat()}
+_merged = main._puq_merge_text(_puq, "si 40 libras seran en total")
+check("puq: respuesta corta se combina con el pedido original",
+      _merged == "cotizacion 4 cajas de 6011 a nombre de industrias IMBA "
+                 "(si 40 libras seran en total)")
+check("puq: pregunta vieja (>30 min) no se combina",
+      main._puq_merge_text({"request_text": "x 6011",
+                            "asked_at": (_dt.now() - _td(minutes=45)).isoformat()},
+                           "40 libras") is None)
+check("puq: una cotización nueva no se combina",
+      main._puq_merge_text(_puq, "mejor cotizame 5 cajas de 7018") is None)
+
+check("reset: 'cotización nueva de 4 cajas' dispara y deja trigger",
+      main._NEW_QUOTE_RESET_RE.search("cotización nueva de 4 cajas de 6011")
+      and main._NEW_QUOTE_RESET_RE.sub("cotización",
+          "cotización nueva de 4 cajas de 6011", count=1)
+          == "cotización de 4 cajas de 6011")
+check("reset: 'nueva cotizacion' sin tilde también",
+      bool(main._NEW_QUOTE_RESET_RE.search("nueva cotizacion para imba")))
+check("reset: una cotización normal NO dispara",
+      not main._NEW_QUOTE_RESET_RE.search("cotizacion 4 cajas de 6011"))
+
+# Nombre explícito en el mensaje actual (regex del path trusted)
+import re
+_mn = re.search(r"a\s+nombre\s+de\s+(?!qui[eé]n)([^\n,;?(]{3,60})",
+                "cotizacion 4 cajas de 6011 a nombre de industrias IMBA "
+                "(si 40 libras seran en total)", re.IGNORECASE)
+check("nombre explícito: captura 'industrias IMBA' y corta en el paréntesis",
+      _mn and _mn.group(1).strip(" .") == "industrias IMBA")
+check("nombre explícito: 'a nombre de quién' NO captura",
+      not re.search(r"a\s+nombre\s+de\s+(?!qui[eé]n)([^\n,;?(]{3,60})",
+                    "¿a nombre de quién la hago?", re.IGNORECASE))
+
+
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
 total = len(results)

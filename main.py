@@ -5066,6 +5066,32 @@ def _parse_quote_name_response(text: str, suggested: str) -> str:
     return suggested
 
 
+_NEW_QUOTE_RESET_RE = re.compile(
+    r"\b(?:nueva\s+cotizaci[oó]n|cotizaci[oó]n\s+nueva|cotizame\s+de\s+nuevo)\b",
+    re.IGNORECASE)
+
+
+def _puq_merge_text(puq: dict, text: str) -> str | None:
+    """v31.4: combina la respuesta a una pregunta de unidad/caja con el pedido
+    original. Solo si la pregunta es fresca (≤30 min) y la respuesta es corta
+    y no es una cotización nueva por sí misma."""
+    req = (puq or {}).get("request_text", "")
+    if not req:
+        return None
+    from datetime import timedelta
+    try:
+        fresh = (datetime.fromisoformat(puq.get("asked_at", ""))
+                 >= datetime.now() - timedelta(minutes=30))
+    except ValueError:
+        fresh = False
+    if not fresh:
+        return None
+    t = (text or "").strip()
+    if not t or len(t) > 70 or re.search(r"cotiz", t, re.IGNORECASE):
+        return None
+    return f"{req} ({t})"
+
+
 def quote_agent(from_number: str, from_name: str, text: str, state: dict):
     """Generate a Zoho estimate + PDF and send via WhatsApp.
 
@@ -5078,6 +5104,19 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
     history = state["conversations"].get(from_number, [])
     meta = get_conv_meta(state, from_number)
     pending = meta.get("pending_quote") or {}
+
+    # v31.4: si el bot acababa de preguntar unidad/tamaño de caja, la
+    # respuesta corta se COMBINA con el pedido original guardado, en vez de
+    # depender del history (caso real 04-nov: '4 cajas de 6011 a nombre de
+    # IMBA' → pregunta de unidad → 'si 40 libras' terminó identificando el
+    # CHROME CARB de una consulta de la mañana).
+    puq = meta.pop("pending_unit_q", None)
+    if puq:
+        save_state(state)
+        merged = _puq_merge_text(puq, text)
+        if merged:
+            text = merged
+            log_action("QuoteAgent", "merged_unit_answer", text[:90])
 
     if pending.get("items"):
         # Multi-message handling: if the user follows up with another quote
@@ -5379,17 +5418,26 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                 q_msg = ("Para estas cajas, ¿me confirma el tamaño "
                          "(10 lbs o 50 lbs)?\n• " + "\n• ".join(caja_questions))
             wa_send(from_number, q_msg)
+            meta["pending_unit_q"] = {"request_text": text,
+                                      "asked_at": datetime.now().isoformat()}
+            save_state(state)
             log_action("QuoteAgent", "asked_caja_size", f"{len(caja_questions)} items")
             return
 
         if unit_mismatches and not line_items:
+            # v31.4: a números internos no les decimos "comuníquese al
+            # 3334-0477" — ese número ES Daniel.
+            _tail = ("" if is_trusted_number(from_number)
+                     else f" O si prefiere, comuníquese al {ELECTRODE_REDIRECT_PHONE}.")
             wa_send(
                 from_number,
                 "Necesito confirmar la unidad de medida antes de cotizar:\n\n"
                 f"• {chr(10).join(unit_mismatches)}\n\n"
-                "¿Me confirma si es por libra, por unidad o por caja? "
-                f"O si prefiere, comuníquese al {ELECTRODE_REDIRECT_PHONE}.",
+                "¿Me confirma si es por libra, por unidad o por caja?" + _tail,
             )
+            meta["pending_unit_q"] = {"request_text": text,
+                                      "asked_at": datetime.now().isoformat()}
+            save_state(state)
             return
 
         # v29.3: si NO hay line_items con precio válido pero SÍ hay items en
@@ -5491,9 +5539,20 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
         # para otra empresa. Para trusted: SIEMPRE preguntar nombre, ignorar el
         # override automático.
         if is_trusted_number(from_number):
-            override_active = False
-            log_action("QuoteAgent", "trusted_skip_override",
-                       f"trusted user — asking for name regardless of override='{company_name_override}'")
+            # v31.4: si el MENSAJE ACTUAL dice explícitamente "a nombre de X",
+            # usarlo — no re-preguntar. El skip del override era por nombres
+            # viejos que el extractor pescaba del history; un "a nombre de"
+            # escrito en este mensaje no es eso.
+            _m_name = re.search(r"a\s+nombre\s+de\s+(?!qui[eé]n)([^\n,;?(]{3,60})",
+                                text, re.IGNORECASE)
+            if _m_name:
+                company_name_override = _m_name.group(1).strip(" .")
+                override_active = True
+                log_action("QuoteAgent", "trusted_explicit_name", company_name_override)
+            else:
+                override_active = False
+                log_action("QuoteAgent", "trusted_skip_override",
+                           f"trusted user — asking for name regardless of override='{company_name_override}'")
         else:
             override_active = bool(company_name_override and len(company_name_override) > 1)
 
@@ -6271,6 +6330,7 @@ _AGENT_SYSTEM = """Sos el asistente interno de SUMIN (soldadura, Honduras) para 
 
 REGLAS:
 - Dato primero, mensajes cortos. Formato de precios: monto + 'lempiras' + unidad en palabras ('322 lempiras cada uno', '51.75 lempiras cada libra'). Precios al cliente llevan ISV 15%; costos y datos internos se dan tal cual.
+- Las respuestas de PRECIO deben ser REENVIABLES al cliente tal cual: NO menciones stock, costos, márgenes ni nada interno en ellas. Daniel suele reenviar ese mensaje directo al cliente. Stock solo si te lo piden explícitamente ('¿hay stock?', '¿cuánto hay?'), y en mensaje aparte del precio.
 - SOLO LECTURA: tus herramientas no modifican nada en Zoho. NUNCA inventes montos, fechas ni cantidades — si una herramienta no da el dato, decilo y sugerí cómo afinarlo.
 - Para comparaciones ('¿y el mes anterior?', '¿cuál azucarera se lleva más?') llamá las herramientas las veces que haga falta y resumí la comparación.
 - Grupo 'azucareras': clientes con AZUCARERA en el nombre, MÁS 'ENERGIA CHUMBAGUA' (Chumbagua compra bajo Compañía Azucarera Chumbagua y Energía Chumbagua). OJO: 'AZUCENA' NO es azucarera. Usá listar_clientes para resolver los ids.
@@ -7025,6 +7085,19 @@ def orchestrate(message_data: dict):
             log_action("Orchestrator", "skipped_zoho_code", text)
             return
 
+        # v31.4: "cotización nueva de..." — resetea TODO el contexto pendiente
+        # (producto enfocado, flete, modo costo, preguntas abiertas) para que
+        # nada viejo contamine el pedido. Pedido de Daniel 04-nov.
+        _m_reset = _NEW_QUOTE_RESET_RE.search(text)
+        if _m_reset:
+            _meta_reset = get_conv_meta(state, from_number)
+            for _k in ("pending_quote", "pending_confirmation", "pending_unit_q",
+                       "flete_ctx", "cost_mode_at", "last_cost_query"):
+                _meta_reset.pop(_k, None)
+            save_state(state)
+            text = _NEW_QUOTE_RESET_RE.sub("cotización", text, count=1).strip()
+            log_action("Orchestrator", "quote_context_reset", text[:80])
+
         # v10b: if Daniel replies with a number (1-6) and there is a pending
         # MIG handoff, dispatch the answer to the customer and return.
         if _try_consume_mig_handoff(from_number, text, state):
@@ -7063,6 +7136,13 @@ def orchestrate(message_data: dict):
         # route this message to quote_agent regardless of detect_quote_request.
         if _meta_check.get("pending_quote"):
             log_action("Orchestrator", "routed_pending_quote", from_number)
+            quote_agent(from_number, from_name, text, state)
+            return
+
+        # v31.4: respuesta a una pregunta de unidad/tamaño de caja → de vuelta
+        # a quote_agent, que la combina con el pedido original guardado.
+        if _meta_check.get("pending_unit_q"):
+            log_action("Orchestrator", "routed_pending_unit_q", from_number)
             quote_agent(from_number, from_name, text, state)
             return
 
