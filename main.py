@@ -1684,7 +1684,8 @@ def transcribe_audio_whisper(audio_bytes: bytes, mime_type: str = "audio/ogg") -
             # v30.8: glosario SUMIN como contexto — sesga la transcripción
             # hacia fracciones escritas (1/8, 3/32) y vocabulario del rubro.
             "prompt": ("Pedido de soldadura SUMIN Honduras: electrodo 6011, 6013, "
-                       "7018, 7024, tungsteno TIG, microalambre ER70S-6, E71T-GS, "
+                       "7018, 7024, NI-99, 308L-16, 309L-16, 316L-16, Chrome Carb "
+                       "TH60, tungsteno TIG, microalambre ER70S-6 0.035, E71T-GS, "
                        "varilla de aporte, diámetros 1/16, 5/64, 3/32, 1/8, 5/32, "
                        "3/16, 7/32, 1/4, 5/16, 3/8; libras, rollo de 2 lbs, 10 lbs, "
                        "11 lbs, 33 lbs, caja de 10 libras, caja de 50 libras, "
@@ -1747,6 +1748,44 @@ def identify_product(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
     return msg.content[0].text
 
 
+# v31.7: limpieza de transcripciones de Whisper ANTES de que el texto entre al
+# pipeline (extractor Haiku, matcher, history). Casos reales 04-nov:
+#   "NI99, de 1,8, 44 libras ... 308, 116, de 1,16"  (fracciones con coma,
+#       308L-16 partido) → cotización salió con cantidades inventadas
+#   "Crown Car 532"  (Chrome Carb 5/32)
+#   "Precio 309.80"  (309 1/8)
+#   "ER70S-6 de 0.35" (0.035)
+_COMMA_FRAC_PAIRS = {("1", "8"), ("1", "16"), ("1", "4"), ("3", "32"),
+                     ("3", "16"), ("3", "8"), ("5", "32"), ("5", "16"),
+                     ("5", "64"), ("7", "32"), ("7", "64")}
+
+
+def _clean_transcript(text: str) -> str:
+    if not text:
+        return text
+    out = text
+    # "308, 116" / "309 116" → 308L-16 (Whisper parte el "L-16")
+    out = re.sub(r"\b(308|309|316)\s*,?\s*1?16\b", r"\1L-16", out)
+    # fracciones con coma o punto: "de 1,8" → "de 1/8" (solo pares del set
+    # cerrado de fracciones SUMIN; nunca "0,9 mm" ni "1,2 mm")
+    def _frac(m):
+        a, b = m.group(1), m.group(2)
+        return f"{a}/{b}" if (a, b) in _COMMA_FRAC_PAIRS else m.group(0)
+    out = re.sub(r"\b(\d)\s*[.,]\s*(\d{1,2})\b(?!\s*(?:mm|lbs?|libras?))", _frac, out)
+    # "309.80" → "309 1/8" ("...y un octavo" oído como decimal .80); tras el
+    # paso anterior "1,8"→"1/8" ya no aplica a estos
+    out = re.sub(r"\b(\d{3,4})\.80\b", r"\1 1/8", out)
+    # diámetros de microalambre mal oídos: 0.35→0.035, 0.45→0.045, 0.30→0.030
+    out = re.sub(r"\b0\.(35|45|30)\b", lambda m: f"0.0{m.group(1)[:2]}", out)
+    # "Crown Car" → Chrome Carb; "Chrome Carb 532" → "Chrome Carb 5/32"
+    out = re.sub(r"\bcrown\s+car[br]?\b", "Chrome Carb", out, flags=re.IGNORECASE)
+    out = re.sub(r"\b(chrome\s*car[br]\w*)\s+(5)(32)\b", r"\1 5/32", out,
+                 flags=re.IGNORECASE)
+    if out != text:
+        log_action("Whisper", "transcript_cleaned", out[:120])
+    return out
+
+
 def try_extract_order_from_image(image_bytes: bytes, mime_type: str = "image/jpeg") -> dict | None:
     """Inspect an image and try to extract a structured order list.
 
@@ -1773,6 +1812,8 @@ def try_extract_order_from_image(image_bytes: bytes, mime_type: str = "image/jpe
         "Schema:\n"
         "{\n"
         '  "is_order_list": true|false,\n'
+        '  "customer_name": "<empresa o persona que PIDE (membrete, firma, remitente '
+        'del correo); \'\' si no se ve>",\n'
         '  "items":    [{"quantity": <num>, "unit": "lb"|"und"|"caja"|"rollo"|"kg"|"", '
         '"product": "<descripción>"}],\n'
         '  "excluded": [{"quantity": <num>, "unit": <str>, "product": <str>, '
@@ -1807,7 +1848,10 @@ def try_extract_order_from_image(image_bytes: bytes, mime_type: str = "image/jpe
         "'1/G' al lado de un electrodo, en el 95% de los casos es '1/8'. Si ves '5/52' o "
         "'3/52' es probablemente '5/32' o '3/32'. NUNCA devuelvas una fracción que no "
         "esté en el set cerrado de arriba — si dudás, elegí la más común (1/8 para "
-        "6011/7018/309-16, 3/32 para tungsteno) y agregá ' [verificar]' al final del product.\n\n"
+        "6011/7018/309-16, 3/32 para tungsteno) y agregá ' [verificar]' al final del product.\n"
+        "Eso es para fracciones ILEGIBLES. Si la línea directamente NO trae "
+        "diámetro/fracción para un electrodo, varilla o tungsteno, NO lo inventes: "
+        "dejá el product sin fracción y agregale ' [sin diametro]' al final.\n\n"
         "Si quantity no se ve, usá 1. Si la unidad no se ve, dejala como cadena vacía."
     )
     try:
@@ -1835,7 +1879,8 @@ def try_extract_order_from_image(image_bytes: bytes, mime_type: str = "image/jpe
     excluded = data.get("excluded") or []
     if not items:
         return None
-    return {"is_order_list": True, "items": items, "excluded": excluded}
+    return {"is_order_list": True, "items": items, "excluded": excluded,
+            "customer_name": (data.get("customer_name") or "").strip()}
 
 def detect_city(text: str) -> str | None:
     t = text.lower()
@@ -3614,22 +3659,38 @@ def vision_agent(from_number: str, from_name: str, media_id: str, mime_type: str
         wa_send(from_number, ack)
         # Construir texto sintético que quote_agent puede parsear con su lógica
         # actual (cotice X de Y, Z de W, ...).
-        synth_parts = []
+        synth_parts, no_diam = [], []
         for it in items:
             qty = _qty_num(it)
-            unit = it.get("unit") or ""
+            unit = it.get("unit") or "und"   # v31.7: sin unidad → und, para el candado de cantidades
             prod = it["product"]
-            piece = f"{qty:g}"
-            if unit:
-                piece += f" {unit}"
-            piece += f" de {prod}"
-            synth_parts.append(piece)
+            # v31.7: '[sin diametro]' = la lista no trae fracción → preguntar
+            if "[sin diametro]" in _strip_accents(prod.lower()):
+                prod = re.sub(r"\s*\[sin diametro\]\s*", " ",
+                              _strip_accents(prod), flags=re.IGNORECASE).strip()
+                no_diam.append(prod)
+            synth_parts.append(f"{qty:g} {unit} de {prod}")
         synthetic_text = "cotice " + ", ".join(synth_parts)
+        # v31.7: cliente leído del membrete/correo → entra como 'a nombre de'
+        customer = (order.get("customer_name") or "").strip()
+        if customer:
+            synthetic_text += f" a nombre de {customer}"
         log_action(
             "VisionAgent",
             "order_extracted",
-            f"items={len(items)} excluded={len(excluded)} from={from_number}",
+            f"items={len(items)} excluded={len(excluded)} cust='{customer[:30]}' "
+            f"no_diam={len(no_diam)} from={from_number}",
         )
+        if no_diam:
+            meta_v = get_conv_meta(state, from_number)
+            meta_v["pending_unit_q"] = {"request_text": synthetic_text,
+                                        "asked_at": datetime.now().isoformat()}
+            save_state(state)
+            wa_send(from_number,
+                    "La lista no trae diámetro para:\n"
+                    + "\n".join(f"• {p[:60]}" for p in no_diam[:5])
+                    + "\n\n¿De qué diámetro los necesita? (ej. 1/8, 3/32, 1/16)")
+            return
         quote_agent(from_number, from_name, synthetic_text, state)
         return
 
@@ -5079,9 +5140,124 @@ def _parse_quote_name_response(text: str, suggested: str) -> str:
     return suggested
 
 
+# v31.7: cantidades explícitas en el texto — para el candado de cantidades
+_QTY_UNIT_NUM_RE = re.compile(
+    r"(\d+(?:[.,]\d+)?)\s*(?:lbs?\b|libras?\b|unidades?\b|und\b|cajas?\b|"
+    r"rollos?\b|kilos?\b|kg\b|quintal(?:es)?\b)", re.IGNORECASE)
+_QTY_WORDS = {"una": 1, "un": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5,
+              "seis": 6, "siete": 7, "ocho": 8, "nueve": 9, "diez": 10,
+              "doce": 12, "quince": 15, "veinte": 20, "veinticinco": 25,
+              "treinta": 30, "cuarenta": 40, "cincuenta": 50, "sesenta": 60,
+              "ochenta": 80, "cien": 100, "doscientos": 200, "doscientas": 200}
+
+
+def _explicit_qty_numbers(text: str) -> set[float]:
+    """Cantidades mencionadas EXPLÍCITAMENTE en el texto, pegadas a una unidad
+    ('44 libras', '2 rollos', 'son 150', 'cien libras')."""
+    t = _strip_accents((text or "").lower())
+    nums = {float(n.replace(",", ".")) for n in _QTY_UNIT_NUM_RE.findall(t)}
+    for m in re.finditer(r"\bson\s+(\d+(?:[.,]\d+)?)\b", t):
+        nums.add(float(m.group(1).replace(",", ".")))
+    for m in re.finditer(r"\b([a-z]+)\s+(?:lbs?\b|libras?\b|unidades?\b|und\b|"
+                         r"cajas?\b|rollos?\b|kilos?\b)", t):
+        if m.group(1) in _QTY_WORDS:
+            nums.add(float(_QTY_WORDS[m.group(1)]))
+    return nums
+
+
 _NEW_QUOTE_RESET_RE = re.compile(
     r"\b(?:nueva\s+cotizaci[oó]n|cotizaci[oó]n\s+nueva|cotizame\s+de\s+nuevo)\b",
     re.IGNORECASE)
+
+
+# v31.7: editar una estimación EXISTENTE por su número ('a la que termina en
+# 7125 agregale...'). Carga la estimación como pending_confirmation y reusa
+# todo el flujo de correcciones (agregar/cambiar/quitar). Solo trusted.
+_EST_REF_RE = re.compile(
+    r"(?:termina\s+(?:en|por)\s*0*(\d{3,6})\b|"
+    r"(?:est(?:imaci[oó]n)?|cotizaci[oó]n)\s*(?:n[uú]mero|#|no\.?)?\s*[-: ]?\s*0*(\d{4,6})\b"
+    r"(?!\s*(?:lbs?|libras?|und|unidades?|cajas?|rollos?|kilos?|kg|/)))",
+    re.IGNORECASE)
+_EST_EDIT_TRIGGER_RE = re.compile(
+    r"\b(agrega|agregale|agregame|a[ñn]ade|a[ñn]adile|suma|sumale|mete|metele|"
+    r"incluye|incluile|cambia|cambiale|corrige|corregile|quita|quitale|elimina)\w*\b",
+    re.IGNORECASE)
+
+
+def _fetch_estimate_by_tail(digits: str) -> dict | None:
+    token = get_zoho_access_token()
+    if not token or not ZOHO_ORG_ID:
+        return None
+    headers = {"Authorization": f"Zoho-oauthtoken {token}"}
+    try:
+        r = httpx.get("https://www.zohoapis.com/books/v3/estimates",
+                      params={"organization_id": ZOHO_ORG_ID,
+                              "estimate_number_contains": digits,
+                              "per_page": 25, "sort_column": "date",
+                              "sort_order": "D"},
+                      headers=headers, timeout=12)
+        ests = r.json().get("estimates", []) if r.status_code == 200 else []
+    except Exception as e:
+        log_action("ZohoAPI", "est_by_tail_error", str(e)[:120])
+        ests = []
+    if not ests:
+        return None
+    best = next((e for e in ests
+                 if e.get("estimate_number", "").replace("-", "").endswith(digits)),
+                ests[0])
+    try:
+        rd = httpx.get(
+            f"https://www.zohoapis.com/books/v3/estimates/{best.get('estimate_id', '')}",
+            params={"organization_id": ZOHO_ORG_ID}, headers=headers, timeout=12)
+        return rd.json().get("estimate", {}) if rd.status_code == 200 else None
+    except Exception as e:
+        log_action("ZohoAPI", "est_detail_error", str(e)[:120])
+        return None
+
+
+def _try_estimate_edit_by_number(from_number: str, from_name: str, text: str,
+                                 state: dict) -> bool:
+    if not is_trusted_number(from_number) or not text:
+        return False
+    if not _EST_EDIT_TRIGGER_RE.search(text):
+        return False
+    m = _EST_REF_RE.search(text)
+    if not m:
+        return False
+    digits = m.group(1) or m.group(2)
+    est = _fetch_estimate_by_tail(digits)
+    if not est:
+        wa_send(from_number,
+                f"No encontré ninguna estimación que termine en {digits}.")
+        return True
+    meta = get_conv_meta(state, from_number)
+    from datetime import timedelta
+    meta["pending_confirmation"] = {
+        "estimate_id": est.get("estimate_id", ""),
+        "estimate_number": est.get("estimate_number", ""),
+        "customer_id": est.get("customer_id", ""),
+        "line_items": [{"item_id": li.get("item_id", ""),
+                        "name": li.get("name", ""),
+                        "quantity": li.get("quantity", 0),
+                        "rate": li.get("rate", 0),
+                        "unit": li.get("unit", "")}
+                       for li in est.get("line_items", [])],
+        "total": float(est.get("total", 0) or 0),
+        "expires_at": (datetime.now()
+                       + timedelta(minutes=CONFIRMATION_TTL_MIN)).isoformat(),
+        "awaiting_field_for_item": None,
+    }
+    save_state(state)
+    log_action("QuoteAgent", "loaded_estimate_for_edit",
+               f"{est.get('estimate_number')} tail={digits}")
+    wa_send(from_number,
+            f"Cargué la *{est.get('estimate_number')}* para editarla…")
+    cleaned = _EST_REF_RE.sub(" ", text)
+    cleaned = re.sub(r"\b(?:a\s+la|la|esa|esta)\s+(?:estimaci[oó]n|cotizaci[oó]n)\b",
+                     " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip() or text
+    confirmation_agent(from_number, from_name, cleaned, state)
+    return True
 
 
 def _puq_merge_text(puq: dict, text: str) -> str | None:
@@ -5296,7 +5472,21 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
         fraction_mismatches = [] # v29.3: items donde el matching ignoró la fracción
         soft_alternatives = []   # v29.6: items no encontrados con presentación exacta pero existen variantes
         caja_questions = []      # v30.4: "caja" de electrodo sin tamaño — preguntar 10 o 50 lbs, no adivinar
+        qty_questions = []       # v31.7: cantidad extraída que no aparece en el texto → preguntar
+        _explicit_nums = _explicit_qty_numbers(text)
         for req in items_requested:
+            # v31.7: candado de cantidades. Caso real 04-nov (EST-007119, nota
+            # de voz revuelta): pidió 44+150+22 lbs y la cotización salió con
+            # 84 LB de un solo item. Si la cantidad extraída no está explícita
+            # en el texto (ni como producto a×b, ej. 2 rollos × 33), PREGUNTAR
+            # en vez de cotizar mal o defaultear 1 lb en silencio.
+            _rq = float(req.get("quantity", 1) or 1)
+            _ok_qty = (any(abs(_rq - n) < 0.01 for n in _explicit_nums)
+                       or any(abs(_rq - a * b) < 0.01
+                              for a in _explicit_nums for b in _explicit_nums))
+            if not _ok_qty:
+                qty_questions.append((req["product"], _rq))
+                continue
             req_unit = _normalize_unit(req.get("unit", ""))
             zoho_item = zoho_search_item_for_quote(req["product"], requested_unit=req_unit)
             # v29.6: si el unit pedido es ROLLO/LB y no salió match, reintentar
@@ -5421,6 +5611,25 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
                     })
                 else:
                     not_found.append(req["product"])
+
+        # v31.7: cantidades sin confirmar — preguntar ANTES de cotizar nada
+        if qty_questions:
+            qlines = []
+            for p, q in qty_questions[:6]:
+                if q == 1:
+                    qlines.append(f"• *{p[:60]}* — ¿qué cantidad?")
+                else:
+                    qlines.append(f"• *{p[:60]}* — ¿qué cantidad? (entendí {q:g})")
+            for p in caja_questions[:4]:
+                qlines.append(f"• *{p[:60]}* — ¿caja de 10 o de 50 lbs?")
+            wa_send(from_number,
+                    "Para no equivocarme, confirmame cantidades:\n" + "\n".join(qlines))
+            meta["pending_unit_q"] = {"request_text": text,
+                                      "asked_at": datetime.now().isoformat()}
+            save_state(state)
+            log_action("QuoteAgent", "asked_quantities",
+                       f"{len(qty_questions)} items (+{len(caja_questions)} cajas)")
+            return
 
         # v30.4: cajas sin tamaño — preguntar antes de cotizar
         if caja_questions and not line_items:
@@ -7078,6 +7287,7 @@ def orchestrate(message_data: dict):
         log_action("Orchestrator", "audio_received", f"media={media_id} mime={mime_type}")
         audio_bytes = wa_download_audio(media_id)
         transcript = transcribe_audio_whisper(audio_bytes, mime_type) if audio_bytes else ""
+        transcript = _clean_transcript(transcript)
         if not transcript:
             wa_send(
                 from_number,
@@ -7123,6 +7333,10 @@ def orchestrate(message_data: dict):
         # v30.9: consultas de COSTO (solo Daniel founder) — antes de todo
         # para que no caigan en el flow de cotización.
         if cost_agent(from_number, text, state):
+            return
+
+        # v31.7: "a la estimación que termina en 7125 agregale X" (trusted)
+        if _try_estimate_edit_by_number(from_number, from_name, text, state):
             return
 
         if _try_add_flete_to_pending(from_number, text, state):

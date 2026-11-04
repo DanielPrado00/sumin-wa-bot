@@ -837,6 +837,45 @@ check("agente: regla de precios reenviables está en el prompt",
       "REENVIABLES" in main._AGENT_SYSTEM)
 
 
+# ─── 17. Transcripciones + candado de cantidades + editar EST (v31.7) ───────
+section("17. Limpieza de voz, cantidades y editar estimación (v31.7)")
+
+# Casos REALES de los logs del 04-nov
+_t1 = main._clean_transcript(
+    "Hola, ocupo una cotización nueva de NI99, de 1,8, 44 libras, "
+    "150 libras de 6011, 1,8, y 22 libras de 308, 116, de 1,16.")
+check("transcript: fracciones con coma y 308,116 → 1/8, 308L-16, 1/16",
+      "1/8" in _t1 and "308L-16" in _t1 and "1/16" in _t1 and "1,8" not in _t1)
+check("transcript: Crown Car 532 → Chrome Carb 5/32",
+      main._clean_transcript("precio por libra del Crown Car 532?")
+      == "precio por libra del Chrome Carb 5/32?")
+check("transcript: Precio 309.80 → 309 1/8",
+      main._clean_transcript("Precio 309.80") == "Precio 309 1/8")
+check("transcript: ER70S-6 de 0.35 → 0.035",
+      "0.035" in main._clean_transcript("el ER70S-6 de 0.35"))
+check("transcript: 0,9 mm y 1,2 mm NO se tocan",
+      main._clean_transcript("microalambre de 0,9 mm y de 1,2 mm")
+      == "microalambre de 0,9 mm y de 1,2 mm")
+
+_nums = main._explicit_qty_numbers(
+    "ocupo 44 libras de NI99 1/8, 150 libras de 6011, dos rollos y son 48")
+check("qty: números explícitos detectados (44, 150, 2, 48)",
+      {44.0, 150.0, 2.0, 48.0} <= _nums)
+check("qty: '1/8' no mete un 8 fantasma", 8.0 not in _nums)
+check("qty: texto sin cantidades → vacío",
+      main._explicit_qty_numbers("cotizame electrodo 6011 de 1/8") == set())
+
+check("est-ref: 'termina en 7125' matchea",
+      bool(main._EST_REF_RE.search("agregale a la que termina en 7125 20 libras")))
+check("est-ref: 'estimacion 007119' matchea",
+      bool(main._EST_REF_RE.search("a la estimacion 007119 quitale el flete")))
+check("est-ref: 'cotizacion 100 libras de 6011' NO matchea",
+      not main._EST_REF_RE.search("agregame a la cotizacion 100 libras de 6011"))
+check("est-trigger: 'agregale' dispara, 'cuanto vale' no",
+      bool(main._EST_EDIT_TRIGGER_RE.search("agregale 20 libras"))
+      and not main._EST_EDIT_TRIGGER_RE.search("cuanto vale el 6011"))
+
+
 # ─── Resumen final ─────────────────────────────────────────────────────────
 print()
 total = len(results)
