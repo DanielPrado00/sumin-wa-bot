@@ -5151,6 +5151,28 @@ _QTY_WORDS = {"una": 1, "un": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5,
               "ochenta": 80, "cien": 100, "doscientos": 200, "doscientas": 200}
 
 
+# v31.8: el extractor convierte unidades (20 KG → 44.09 LB, caja → 10/50 lb,
+# rollos → lbs), así que la cantidad extraída puede ser un número EXPLÍCITO
+# multiplicado por un factor legítimo. Aceptarlos para no preguntar de más
+# (caso real 05-nov: '20 kg' del correo de Azunosa → 44.09 LB → el candado
+# preguntaba la cantidad en loop infinito).
+_QTY_ACCEPT_FACTORS = (2.20462, 2.0, 10.0, 11.0, 25.0, 33.0, 50.0)
+
+
+def _qty_matches_explicit(rq: float, nums: set[float]) -> bool:
+    for n in nums:
+        if abs(rq - n) < 0.01:
+            return True
+        for f in _QTY_ACCEPT_FACTORS:
+            if abs(rq - n * f) < 0.05 or abs(rq - n / f) < 0.001:
+                return True
+    for a in nums:
+        for b in nums:
+            if abs(rq - a * b) < 0.01:
+                return True
+    return False
+
+
 def _explicit_qty_numbers(text: str) -> set[float]:
     """Cantidades mencionadas EXPLÍCITAMENTE en el texto, pegadas a una unidad
     ('44 libras', '2 rollos', 'son 150', 'cien libras')."""
@@ -5300,12 +5322,15 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
     # IMBA' → pregunta de unidad → 'si 40 libras' terminó identificando el
     # CHROME CARB de una consulta de la mañana).
     puq = meta.pop("pending_unit_q", None)
+    puq_asks = 0
     if puq:
         save_state(state)
         merged = _puq_merge_text(puq, text)
         if merged:
             text = merged
-            log_action("QuoteAgent", "merged_unit_answer", text[:90])
+            puq_asks = int(puq.get("asks", 0) or 0)
+            log_action("QuoteAgent", "merged_unit_answer",
+                       f"asks={puq_asks} {text[:80]}")
 
     if pending.get("items"):
         # Multi-message handling: if the user follows up with another quote
@@ -5481,10 +5506,10 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
             # en el texto (ni como producto a×b, ej. 2 rollos × 33), PREGUNTAR
             # en vez de cotizar mal o defaultear 1 lb en silencio.
             _rq = float(req.get("quantity", 1) or 1)
-            _ok_qty = (any(abs(_rq - n) < 0.01 for n in _explicit_nums)
-                       or any(abs(_rq - a * b) < 0.01
-                              for a in _explicit_nums for b in _explicit_nums))
-            if not _ok_qty:
+            # v31.8: acepta conversiones legítimas (KG×2.20462, cajas, rollos)
+            # y, tras 2 preguntas sin cuadrar, deja pasar en vez de loopear.
+            if (not _qty_matches_explicit(_rq, _explicit_nums)
+                    and puq_asks < 2):
                 qty_questions.append((req["product"], _rq))
                 continue
             req_unit = _normalize_unit(req.get("unit", ""))
@@ -5625,10 +5650,12 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
             wa_send(from_number,
                     "Para no equivocarme, confirmame cantidades:\n" + "\n".join(qlines))
             meta["pending_unit_q"] = {"request_text": text,
-                                      "asked_at": datetime.now().isoformat()}
+                                      "asked_at": datetime.now().isoformat(),
+                                      "asks": puq_asks + 1}
             save_state(state)
             log_action("QuoteAgent", "asked_quantities",
-                       f"{len(qty_questions)} items (+{len(caja_questions)} cajas)")
+                       f"{len(qty_questions)} items (+{len(caja_questions)} cajas) "
+                       f"asks={puq_asks + 1}")
             return
 
         # v30.4: cajas sin tamaño — preguntar antes de cotizar

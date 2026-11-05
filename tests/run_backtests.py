@@ -865,6 +865,18 @@ check("qty: '1/8' no mete un 8 fantasma", 8.0 not in _nums)
 check("qty: texto sin cantidades → vacío",
       main._explicit_qty_numbers("cotizame electrodo 6011 de 1/8") == set())
 
+# v31.8 — caso real 05-nov: 20 kg del correo de Azunosa → extractor 44.09 LB
+_n_az = main._explicit_qty_numbers("cotice 20 kg de electrodo 6013 5/32, "
+                                   "100 und de vidrios claros")
+check("qty v31.8: 20 KG→44.09 LB se acepta (factor 2.20462)",
+      main._qty_matches_explicit(44.0924, _n_az))
+check("qty v31.8: 100 und directo se acepta",
+      main._qty_matches_explicit(100, _n_az))
+check("qty v31.8: 2 rollos → 66 lb se acepta (×33)",
+      main._qty_matches_explicit(66, {2.0}))
+check("qty v31.8: 84 LB vs {44,150,22} sigue preguntando",
+      not main._qty_matches_explicit(84, {44.0, 150.0, 22.0}))
+
 check("est-ref: 'termina en 7125' matchea",
       bool(main._EST_REF_RE.search("agregale a la que termina en 7125 20 libras")))
 check("est-ref: 'estimacion 007119' matchea",
