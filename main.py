@@ -4481,6 +4481,12 @@ def zoho_get_or_create_customer(name: str, phone: str) -> str | None:
     clean_name = (name or "").strip()
     if not clean_name:
         return None
+    # v31.8: alias de clientes también en cotizaciones ("Azunosa" en el
+    # membrete de un correo → AZUCARERA DEL NORTE, no un cliente nuevo)
+    _alias = CLIENT_ALIASES.get(_strip_accents(clean_name).lower())
+    if _alias:
+        log_action("ZohoAPI", "customer_alias", f"{clean_name} → {_alias}")
+        clean_name = _alias
     query_tokens = _significant_tokens(clean_name)
     # If the name reduced to no significant tokens (e.g. only legal forms),
     # fall back to a less-stripped token set so search isn't empty.
