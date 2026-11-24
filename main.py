@@ -1684,8 +1684,10 @@ def transcribe_audio_whisper(audio_bytes: bytes, mime_type: str = "audio/ogg") -
             # v30.8: glosario SUMIN como contexto — sesga la transcripción
             # hacia fracciones escritas (1/8, 3/32) y vocabulario del rubro.
             "prompt": ("Pedido de soldadura SUMIN Honduras: electrodo 6011, 6013, "
-                       "7018, 7024, NI-99, 308L-16, 309L-16, 316L-16, Chrome Carb "
-                       "TH60, tungsteno TIG, microalambre ER70S-6 0.035, E71T-GS, "
+                       "7018, 7024, NI-99, 308L-16, 309L-16, 312, 316L-16, Chrome Carb "
+                       "TH60, Tensile Weld, tungsteno TIG, microalambre ER70S-6 0.035, "
+                       "E71T-GS, E71T-1C/1M, ER5356, ER4043, bronce revestido, SafeCut "
+                       "Defender, spray penetrante, revelador, chaqueta talla XL, "
                        "varilla de aporte, diámetros 1/16, 5/64, 3/32, 1/8, 5/32, "
                        "3/16, 7/32, 1/4, 5/16, 3/8; libras, rollo de 2 lbs, 10 lbs, "
                        "11 lbs, 33 lbs, caja de 10 libras, caja de 50 libras, "
@@ -1777,6 +1779,22 @@ def _clean_transcript(text: str) -> str:
     out = re.sub(r"\b(\d{3,4})\.80\b", r"\1 1/8", out)
     # diámetros de microalambre mal oídos: 0.35→0.035, 0.45→0.045, 0.30→0.030
     out = re.sub(r"\b0\.(35|45|30)\b", lambda m: f"0.0{m.group(1)[:2]}", out)
+    # v31.9 — variantes reales de la semana 17–24 nov:
+    out = out.replace("\u2044", "/")                          # "1⁄8" (barra de fracción)
+    # "de 1 1 8vo" / "de 1 1 8" / "1 1/8" → 1/8 ("un octavo" oído como dígitos)
+    out = re.sub(r"\b1\s+1\s*/?\s*8(?:vo)?\b", "1/8", out)
+    out = re.sub(r"\b1\s+8vo\b", "1/8", out)
+    out = re.sub(r"\b(?:un|1|en)\s+octavo\b", "1/8", out, flags=re.IGNORECASE)
+    # "de 332" / "de 532" / "de 732" → 3/32, 5/32, 7/32
+    out = re.sub(r"\bde\s+([357])32\b", r"de \1/32", out)
+    # nombres mal oídos
+    out = re.sub(r"\brobles\b", "rollos", out, flags=re.IGNORECASE)
+    out = re.sub(r"\s*,?\s*pleca\s+", "/", out, flags=re.IGNORECASE)   # E71T-1C pleca 1M
+    out = re.sub(r"\btensil\b", "Tensile", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bsafe\s?coo?t\b", "SafeCut", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bER\s?53-56\b", "ER5356", out, flags=re.IGNORECASE)
+    out = re.sub(r"\b40-43\b", "4043", out)
+    out = re.sub(r"\bSOHO\b", "Zoho", out)
     # "Crown Car" → Chrome Carb; "Chrome Carb 532" → "Chrome Carb 5/32"
     out = re.sub(r"\bcrown\s+car[br]?\b", "Chrome Carb", out, flags=re.IGNORECASE)
     out = re.sub(r"\b(chrome\s*car[br]\w*)\s+(5)(32)\b", r"\1 5/32", out,
@@ -5180,16 +5198,19 @@ def _qty_matches_explicit(rq: float, nums: set[float]) -> bool:
 
 
 def _explicit_qty_numbers(text: str) -> set[float]:
-    """Cantidades mencionadas EXPLÍCITAMENTE en el texto, pegadas a una unidad
-    ('44 libras', '2 rollos', 'son 150', 'cien libras')."""
+    """Cantidades mencionadas en el texto. v31.9: CUALQUIER número suelto
+    cuenta (antes exigía una unidad conocida pegada: '4 chaquetas', '5 sprays',
+    'un spray' disparaban la pregunta en falso — 12 falsas alarmas en una
+    semana). Se excluyen fracciones (1/8), diámetros (0.035) y números pegados
+    a letras/guiones (E71T-1C, 308L-16, 2x4)."""
     t = _strip_accents((text or "").lower())
-    nums = {float(n.replace(",", ".")) for n in _QTY_UNIT_NUM_RE.findall(t)}
-    for m in re.finditer(r"\bson\s+(\d+(?:[.,]\d+)?)\b", t):
-        nums.add(float(m.group(1).replace(",", ".")))
-    for m in re.finditer(r"\b([a-z]+)\s+(?:lbs?\b|libras?\b|unidades?\b|und\b|"
-                         r"cajas?\b|rollos?\b|kilos?\b)", t):
-        if m.group(1) in _QTY_WORDS:
-            nums.add(float(_QTY_WORDS[m.group(1)]))
+    t = re.sub(r"\d+\s*/\s*\d+", " ", t)          # fracciones
+    t = re.sub(r"(?<!\d)0?\.\d{2,3}\b", " ", t)    # diámetros .035
+    nums = {float(n.replace(",", "."))
+            for n in re.findall(r"(?<![\w.\-])\d+(?:[.,]\d+)?(?![\w/\-])", t)}
+    for w in re.findall(r"[a-z]+", t):
+        if w in _QTY_WORDS:
+            nums.add(float(_QTY_WORDS[w]))
     return nums
 
 
@@ -5286,6 +5307,33 @@ def _try_estimate_edit_by_number(from_number: str, from_name: str, text: str,
     cleaned = re.sub(r"\s{2,}", " ", cleaned).strip() or text
     confirmation_agent(from_number, from_name, cleaned, state)
     return True
+
+
+# v31.9: TALLA como constraint duro (caso EST-007403: pidió chaqueta talla XL
+# y el matcher puso TALLA-M). Nombres en catálogo: '... TALLA-M', '...ALLOY-L',
+# '... TALLA XL'.
+_TALLA_Q_RE = re.compile(r"\btalla\s*-?\s*(xxl|xl|l|m|s)\b", re.IGNORECASE)
+_TALLA_NAME_RE = re.compile(r"(?:\bTALLA[\s-]*|-)(XXL|XL|L|M|S)\s*$", re.IGNORECASE)
+
+
+def _enforce_talla(query: str, item: dict | None, catalog: list) -> dict | None:
+    mq = _TALLA_Q_RE.search(query or "")
+    if not mq or not item:
+        return item
+    want = mq.group(1).upper()
+    name = (item.get("item_name") or item.get("name") or "").strip()
+    mn = _TALLA_NAME_RE.search(name)
+    if not mn or mn.group(1).upper() == want:
+        return item
+    base = _TALLA_NAME_RE.sub("", name).strip(" -").upper()
+    for it in catalog or []:
+        nm = (it.get("item_name") or it.get("name") or "").strip()
+        m2 = _TALLA_NAME_RE.search(nm)
+        if (m2 and m2.group(1).upper() == want
+                and _TALLA_NAME_RE.sub("", nm).strip(" -").upper() == base):
+            log_action("QuoteAgent", "talla_swap", f"{name[-12:]} → {nm[-12:]}")
+            return it
+    return item
 
 
 def _puq_merge_text(puq: dict, text: str) -> str | None:
@@ -5512,14 +5560,15 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
             # en el texto (ni como producto a×b, ej. 2 rollos × 33), PREGUNTAR
             # en vez de cotizar mal o defaultear 1 lb en silencio.
             _rq = float(req.get("quantity", 1) or 1)
-            # v31.8: acepta conversiones legítimas (KG×2.20462, cajas, rollos)
-            # y, tras 2 preguntas sin cuadrar, deja pasar en vez de loopear.
+            # v31.8: acepta conversiones legítimas (KG×2.20462, cajas, rollos).
+            # v31.9: se pregunta UNA sola vez; la respuesta del usuario manda.
             if (not _qty_matches_explicit(_rq, _explicit_nums)
-                    and puq_asks < 2):
+                    and puq_asks < 1):
                 qty_questions.append((req["product"], _rq))
                 continue
             req_unit = _normalize_unit(req.get("unit", ""))
             zoho_item = zoho_search_item_for_quote(req["product"], requested_unit=req_unit)
+            zoho_item = _enforce_talla(req["product"], zoho_item, fetch_zoho_catalog())
             # v29.6: si el unit pedido es ROLLO/LB y no salió match, reintentar
             # SIN filtro de unidad — el catálogo es inconsistente (mismo MIG
             # cobrizado catalogado como ROLLO en un variant y LB en otro).
@@ -5798,8 +5847,10 @@ def quote_agent(from_number: str, from_name: str, text: str, state: dict):
             # usarlo — no re-preguntar. El skip del override era por nombres
             # viejos que el extractor pescaba del history; un "a nombre de"
             # escrito en este mensaje no es eso.
-            _m_name = re.search(r"a\s+nombre\s+de\s+(?!qui[eé]n)([^\n,;?(]{3,60})",
-                                text, re.IGNORECASE)
+            _m_name = (re.search(r"\b(?:a|en)\s+nombre\s+de\s+(?!qui[eé]n)([^\n,;?(.]{3,60})",
+                                 text, re.IGNORECASE)
+                       or re.search(r"\bnombre\s+(?!de\b)([A-ZÁÉÍÓÚÑ][^\n,;?(.]{2,60})",
+                                    text))
             if _m_name:
                 company_name_override = _m_name.group(1).strip(" .")
                 override_active = True

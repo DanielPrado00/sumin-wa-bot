@@ -862,8 +862,35 @@ _nums = main._explicit_qty_numbers(
 check("qty: números explícitos detectados (44, 150, 2, 48)",
       {44.0, 150.0, 2.0, 48.0} <= _nums)
 check("qty: '1/8' no mete un 8 fantasma", 8.0 not in _nums)
-check("qty: texto sin cantidades → vacío",
-      main._explicit_qty_numbers("cotizame electrodo 6011 de 1/8") == set())
+check("qty: sin cantidad real → el 1 por defecto NO cuadra (pregunta)",
+      not main._qty_matches_explicit(
+          1, main._explicit_qty_numbers("cotizame electrodo 6011 de 1/8")))
+
+# v31.9 — falsas alarmas reales de la semana 17–24 nov
+check("qty v31.9: '4 chaquetas' / '1 chaqueta' cuentan sin unidad conocida",
+      {4.0, 1.0} <= main._explicit_qty_numbers(
+          "cotizarme 4 chaquetas talla M, 4 chaquetas talla L y 1 chaqueta talla XL"))
+check("qty v31.9: 'un spray' cuenta como 1",
+      1.0 in main._explicit_qty_numbers("cotizar un spray penetrante y un spray revelador"))
+check("qty v31.9: E71T-1C / 308L-16 / 2x4 no meten números",
+      main._explicit_qty_numbers("rollo E71T-1C, 308L-16, vidrio 2x4") == set())
+_c = main._clean_transcript("cotizar 9 rollos de E71T-1C pleca 1M y también 250 libras "
+                            "de 6011 de 1 1 8vo y 250 libras de 7018 de 1 1 8vo.")
+check("transcript v31.9: '1 1 8vo' → 1/8 y 'pleca' → /",
+      "6011 de 1/8" in _c and "7018 de 1/8" in _c and "E71T-1C/1M" in _c)
+check("transcript v31.9: 'de 332' → 3/32, '1 octavo' → 1/8",
+      main._clean_transcript("220 libras 308 de 332 y 7018 de 1 octavo")
+      == "220 libras 308 de 3/32 y 7018 de 1/8")
+check("transcript v31.9: robles→rollos, Tensil→Tensile, ER53-56→ER5356",
+      main._clean_transcript("4 robles de Tensil y ER53-56")
+      == "4 rollos de Tensile y ER5356")
+_cat_t = [{"item_name": "CHAQUETA IGNIFUGA AMERICAN ALLOY TALLA-M", "item_id": "m"},
+          {"item_name": "CHAQUETA IGNIFUGA AMERICAN ALLOY-L", "item_id": "l"},
+          {"item_name": "CHAQUETA IGNIFUGA AMERICAN ALLOY TALLA XL", "item_id": "xl"}]
+check("talla: pidió XL y el matcher dio M → swap a XL",
+      main._enforce_talla("chaqueta talla XL", _cat_t[0], _cat_t)["item_id"] == "xl")
+check("talla: pidió M y dio M → intacto",
+      main._enforce_talla("chaqueta talla M", _cat_t[0], _cat_t)["item_id"] == "m")
 
 # v31.8 — caso real 05-nov: 20 kg del correo de Azunosa → extractor 44.09 LB
 _n_az = main._explicit_qty_numbers("cotice 20 kg de electrodo 6013 5/32, "
